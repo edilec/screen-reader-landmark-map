@@ -1,0 +1,394 @@
+/**
+ * Landmarks, heading hierarchy and the navigable outline.
+ *
+ * Everything here is DOM-BASED EVIDENCE. The input is markup somebody
+ * exported; no browser was opened, no assistive technology was run, and the
+ * order in the outline is document order, not announcement order. Where the
+ * markup does not settle a question -- a label reference that names nothing in
+ * this document, an id more than one element carries, a role this tool has
+ * never heard of -- the answer is UNRESOLVED, and an unresolved landmark is
+ * excluded from a comparison whose result would otherwise be a positive claim.
+ */
+
+import { isPerceivable, renderText } from './rules.mjs'
+
+/** The landmark roles this tool maps. */
+export const LANDMARK_ROLES = Object.freeze([
+  'banner',
+  'complementary',
+  'contentinfo',
+  'form',
+  'main',
+  'navigation',
+  'region',
+  'search',
+])
+
+/** Roles a page is expected to carry at most once. */
+export const UNIQUE_LANDMARK_ROLES = Object.freeze(['banner', 'contentinfo', 'main'])
+
+/**
+ * Roles that legitimately repeat, and therefore have to be told apart. Two of
+ * these with no accessible name is the defect this tool exists to locate.
+ */
+export const REPEATABLE_LANDMARK_ROLES = Object.freeze([
+  'complementary',
+  'form',
+  'navigation',
+  'region',
+  'search',
+])
+
+/** ARIA roles this tool recognises on a `role` attribute. Anything else is unknown. */
+export const KNOWN_ROLES = Object.freeze([
+  'alert', 'alertdialog', 'application', 'article', 'banner', 'blockquote', 'button', 'caption',
+  'cell', 'checkbox', 'code', 'columnheader', 'combobox', 'complementary', 'contentinfo',
+  'definition', 'deletion', 'dialog', 'directory', 'document', 'emphasis', 'feed', 'figure',
+  'form', 'generic', 'grid', 'gridcell', 'group', 'heading', 'img', 'insertion', 'link', 'list',
+  'listbox', 'listitem', 'log', 'main', 'marquee', 'math', 'menu', 'menubar', 'menuitem',
+  'menuitemcheckbox', 'menuitemradio', 'meter', 'navigation', 'none', 'note', 'option',
+  'paragraph', 'presentation', 'progressbar', 'radio', 'radiogroup', 'region', 'row', 'rowgroup',
+  'rowheader', 'scrollbar', 'search', 'searchbox', 'separator', 'slider', 'spinbutton', 'status',
+  'strong', 'subscript', 'superscript', 'switch', 'tab', 'table', 'tablist', 'tabpanel', 'term',
+  'textbox', 'time', 'timer', 'toolbar', 'tooltip', 'tree', 'treegrid', 'treeitem',
+])
+
+/** Sectioning content, which scopes `header`, `footer`, and an unnamed `aside`. */
+const SECTIONING = Object.freeze(['article', 'aside', 'main', 'nav', 'section'])
+
+const HEADING_TAGS = Object.freeze(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+
+/** The implicit landmark role of an element, before its name is known. */
+const IMPLICIT_LANDMARK = Object.freeze({
+  aside: 'complementary',
+  form: 'form',
+  main: 'main',
+  nav: 'navigation',
+  search: 'search',
+  section: 'region',
+})
+
+/** Implicit roles that exist only when the element carries an accessible name. */
+const NEEDS_NAME_TO_BE_A_LANDMARK = Object.freeze(['form', 'region'])
+
+function tokens(value) {
+  return typeof value === 'string' ? value.split(/\s+/u).filter((token) => token !== '') : []
+}
+
+function attribute(element, name) {
+  const value = element.attributes.get(name)
+  return typeof value === 'string' ? value : null
+}
+
+function hasSectioningAncestor(element) {
+  for (let node = element.parent; node !== null; node = node.parent) {
+    if (node.kind === 'element' && SECTIONING.includes(node.tag)) return true
+  }
+  return false
+}
+
+/**
+ * The text an element contributes to its own name.
+ *
+ * `aria-hidden="true"` removes a subtree from the accessibility tree, so its
+ * text is not part of any name. Nothing else is modelled: this is the DOM's
+ * text, not a rendering, and CSS that hides or generates text is not in the
+ * snapshot.
+ */
+export function textContent(element) {
+  if (element.kind === 'text') return element.text
+  if (attribute(element, 'aria-hidden') === 'true') return ''
+  return element.children.map((child) => textContent(child)).join(' ')
+}
+
+/**
+ * Resolve the accessible name of a landmark or heading.
+ *
+ * Returns `{ name, source }`, or `{ unresolved: true }` when the markup names
+ * something this document does not contain or contains twice. Unresolved is
+ * not "unnamed": the two lead to different conclusions and they stay apart.
+ */
+export function accessibleName(element, index, { fromContent }) {
+  const references = tokens(attribute(element, 'aria-labelledby'))
+  if (references.length > 0) {
+    const parts = []
+    for (const reference of references) {
+      const targets = index.get(reference)
+      if (targets === undefined || targets.length !== 1) {
+        return { unresolved: true, reference }
+      }
+      parts.push(textContent(targets[0]))
+    }
+    const name = renderText(parts.join(' '))
+    if (isPerceivable(name)) return { name, source: 'aria-labelledby' }
+    return { name: '', source: null }
+  }
+
+  const label = attribute(element, 'aria-label')
+  if (label !== null && isPerceivable(label)) {
+    return { name: renderText(label), source: 'aria-label' }
+  }
+
+  if (fromContent) {
+    const content = textContent(element)
+    if (isPerceivable(content)) return { name: renderText(content), source: 'content' }
+  }
+
+  const title = attribute(element, 'title')
+  if (title !== null && isPerceivable(title)) return { name: renderText(title), source: 'title' }
+
+  return { name: '', source: null }
+}
+
+/** The explicit role token, or null. Throws nothing: unknown is an answer. */
+export function declaredRole(element) {
+  const declared = tokens(attribute(element, 'role'))[0]
+  if (declared === undefined) return { role: null }
+  if (!KNOWN_ROLES.includes(declared)) return { role: null, unknown: declared }
+  return { role: declared }
+}
+
+/** The implicit landmark role of an element, given whether it has a name. */
+export function implicitLandmarkRole(element, hasName) {
+  const tag = element.tag
+  if (tag === 'header' || tag === 'footer') {
+    if (hasSectioningAncestor(element)) return null
+    return tag === 'header' ? 'banner' : 'contentinfo'
+  }
+  const role = IMPLICIT_LANDMARK[tag]
+  if (role === undefined) return null
+  if (NEEDS_NAME_TO_BE_A_LANDMARK.includes(role) && !hasName) return null
+  // A nested `aside` is complementary only when it is named; otherwise it is
+  // generic, which is what the HTML accessibility mapping says.
+  if (role === 'complementary' && hasSectioningAncestor(element) && !hasName) return null
+  return role
+}
+
+/** The heading level of an element, or null when it is not a heading. */
+export function headingLevel(element, role) {
+  const explicit = attribute(element, 'aria-level')
+  const isHeading = role === 'heading' || HEADING_TAGS.includes(element.tag)
+  if (!isHeading) return null
+  if (explicit !== null && /^[1-9][0-9]?$/.test(explicit)) return Number(explicit)
+  if (HEADING_TAGS.includes(element.tag)) return Number(element.tag.slice(1))
+  return 2
+}
+
+/**
+ * Walk the document once and produce the landmarks, the headings and the
+ * outline that threads them together.
+ *
+ * The outline's `depth` is landmark nesting depth in the DOM. It is not a
+ * reading order and it is not what a screen reader's landmark rotor will
+ * present; it is where these elements sit in the markup that was exported.
+ */
+export function mapStructure(root, index) {
+  const landmarks = []
+  const headings = []
+  const outline = []
+  const problems = []
+
+  const walk = (element, depth) => {
+    let nextDepth = depth
+    if (element.kind === 'element' && element.tag !== '#document') {
+      const declared = declaredRole(element)
+      if (declared.unknown !== undefined) {
+        // The element is something this tool has never heard of, so what its
+        // descendants mean is unknown too: a role can change how its contents
+        // are exposed. The subtree is left unmapped and the run is incomplete,
+        // which is the conservative answer and the one the rule documents.
+        problems.push({ ruleId: 'role-unknown', detail: declared.unknown, pointer: element.path })
+        return
+      }
+
+      const level = headingLevel(element, declared.role)
+      const isHeading = level !== null
+      const named = accessibleName(element, index, { fromContent: isHeading })
+
+      if (isHeading) {
+        if (named.unresolved === true) {
+          problems.push({
+            ruleId: 'name-reference-unresolved',
+            detail: `the heading at ${element.path} names id "${named.reference}"`,
+            pointer: element.path,
+          })
+          headings.push({ element, level, name: null, determined: false })
+          outline.push({ kind: 'heading', level, name: null, pointer: element.path, depth })
+        } else {
+          headings.push({ element, level, name: named.name, determined: true })
+          outline.push({ kind: 'heading', level, name: named.name, pointer: element.path, depth })
+        }
+      } else {
+        const hasName =
+          named.unresolved === true ? null : named.source !== null && isPerceivable(named.name)
+        const implicit = implicitLandmarkRole(element, hasName === true)
+        const role = declared.role !== null ? declared.role : implicit
+
+        if (role !== null && LANDMARK_ROLES.includes(role)) {
+          if (declared.role !== null && declared.role === implicit) {
+            problems.push({
+              ruleId: 'landmark-role-redundant',
+              detail: `${element.tag} already means ${role}`,
+              pointer: element.path,
+            })
+          }
+          if (named.unresolved === true) {
+            problems.push({
+              ruleId: 'name-reference-unresolved',
+              detail: `the ${role} landmark at ${element.path} names id "${named.reference}", so the duplicate-landmark comparison for ${role} could not be completed`,
+              pointer: element.path,
+            })
+            landmarks.push({ element, role, name: null, source: null, determined: false, depth })
+          } else {
+            landmarks.push({
+              element,
+              role,
+              name: named.name,
+              source: named.source,
+              determined: true,
+              depth,
+            })
+          }
+          outline.push({
+            kind: 'landmark',
+            role,
+            name: named.unresolved === true ? null : named.name,
+            pointer: element.path,
+            depth,
+          })
+          nextDepth = depth + 1
+        }
+      }
+    }
+    for (const child of element.children) {
+      if (child.kind === 'element') walk(child, nextDepth)
+    }
+  }
+
+  walk(root, 0)
+  return { landmarks, headings, outline, problems }
+}
+
+/**
+ * Locate duplicate landmarks that cannot be told apart.
+ *
+ * A landmark whose name could not be resolved is NOT counted as unnamed. It is
+ * left out of the comparison, and the run is already incomplete because of it,
+ * so the comparison is never reported as clean on evidence that was dropped
+ * while making it.
+ */
+export function findDuplicateLandmarks(landmarks) {
+  const byRole = new Map()
+  for (const landmark of landmarks) {
+    const list = byRole.get(landmark.role)
+    if (list === undefined) byRole.set(landmark.role, [landmark])
+    else list.push(landmark)
+  }
+
+  const problems = []
+  for (const role of LANDMARK_ROLES) {
+    const group = byRole.get(role) ?? []
+    if (group.length === 0) continue
+
+    if (UNIQUE_LANDMARK_ROLES.includes(role) && group.length > 1) {
+      for (const landmark of group.slice(1)) {
+        problems.push({
+          ruleId: 'duplicate-unique-landmark',
+          detail: `${role} appears ${group.length} times`,
+          pointer: landmark.element.path,
+        })
+      }
+    }
+
+    if (!REPEATABLE_LANDMARK_ROLES.includes(role)) continue
+
+    const determined = group.filter((landmark) => landmark.determined)
+    const unnamed = determined.filter((landmark) => landmark.source === null)
+    if (unnamed.length > 1) {
+      for (const landmark of unnamed) {
+        problems.push({
+          ruleId: 'duplicate-unlabelled-landmark',
+          detail: `${unnamed.length} ${role} landmarks carry no accessible name`,
+          pointer: landmark.element.path,
+        })
+      }
+    }
+
+    const seen = new Map()
+    for (const landmark of determined) {
+      if (landmark.source === null) continue
+      const list = seen.get(landmark.name)
+      if (list === undefined) seen.set(landmark.name, [landmark])
+      else list.push(landmark)
+    }
+    for (const [name, list] of seen) {
+      if (list.length < 2) continue
+      for (const landmark of list) {
+        problems.push({
+          ruleId: 'duplicate-landmark-name',
+          detail: `${list.length} ${role} landmarks are all named "${name}"`,
+          pointer: landmark.element.path,
+        })
+      }
+    }
+  }
+  return problems
+}
+
+/**
+ * Locate skipped levels in the heading hierarchy.
+ *
+ * A heading whose name could not be resolved still has a LEVEL, so it stays in
+ * the hierarchy check; only the emptiness check is skipped for it, because
+ * "this heading is empty" would be a claim the evidence does not support.
+ */
+export function findHeadingProblems(headings) {
+  const problems = []
+  if (headings.length === 0) {
+    problems.push({ ruleId: 'no-heading', detail: 'the document declares no heading' })
+    return problems
+  }
+
+  if (headings[0].level !== 1) {
+    problems.push({
+      ruleId: 'first-heading-not-top-level',
+      detail: `the first heading is level ${headings[0].level}`,
+      pointer: headings[0].element.path,
+    })
+  }
+
+  const topLevel = headings.filter((heading) => heading.level === 1)
+  if (topLevel.length > 1) {
+    for (const heading of topLevel.slice(1)) {
+      problems.push({
+        ruleId: 'multiple-top-level-headings',
+        detail: `${topLevel.length} level 1 headings`,
+        pointer: heading.element.path,
+      })
+    }
+  }
+
+  let previous = headings[0].level
+  for (const heading of headings.slice(1)) {
+    if (heading.level > previous + 1) {
+      problems.push({
+        ruleId: 'heading-level-skipped',
+        detail: `level ${previous} is followed by level ${heading.level}`,
+        pointer: heading.element.path,
+      })
+    }
+    previous = heading.level
+  }
+
+  for (const heading of headings) {
+    if (!heading.determined) continue
+    if (heading.name === '') {
+      problems.push({
+        ruleId: 'heading-empty',
+        detail: `the level ${heading.level} heading has no accessible name`,
+        pointer: heading.element.path,
+      })
+    }
+  }
+  return problems
+}
