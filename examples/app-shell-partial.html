@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Console</title>
+  </head>
+  <body>
+    <header>
+      <nav aria-label="Primary">
+        <ul>
+          <li><a href="/">Overview</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Console</h1>
+
+      <side-panel>
+        <template shadowrootmode="open">
+          <nav>
+            <slot name="links"></slot>
+          </nav>
+        </template>
+        <a href="/alerts/" slot="links">Alerts</a>
+      </side-panel>
+
+      <billing-summary></billing-summary>
+
+      <iframe src="/embed/usage" title="Usage chart"></iframe>
+
+      <h2 aria-labelledby="missing-label"></h2>
+    </main>
+
+    <footer>
+      <p>Edilec Private Limited</p>
+    </footer>
+  </body>
+</html>
