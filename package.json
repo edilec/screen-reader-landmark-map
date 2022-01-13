@@ -1,17 +1,51 @@
 {
   "name": "screen-reader-landmark-map",
-  "version": "0.0.0",
-  "description": "Map landmarks and heading hierarchy to reveal navigation gaps.",
+  "version": "0.1.0",
+  "description": "Map landmark roles and heading hierarchy from exported DOM snapshots into a navigable outline, and locate duplicate unlabelled regions and skipped heading levels.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "lint": "node --check src/rules.mjs && node --check src/html.mjs && node --check src/structure.mjs && node --check src/write-guard.mjs && node --check src/index.mjs && node --check bin/screen-reader-landmark-map.mjs && node --check test/html-subset.test.mjs && node --check test/landmarks.test.mjs && node --check test/headings.test.mjs && node --check test/incomplete.test.mjs && node --check test/severity-table.test.mjs && node --check test/severity-behaviour.test.mjs && node --check test/determinism.test.mjs && node --check test/limits.test.mjs && node --check test/write-guard.test.mjs && node --check test/sanitisation.test.mjs && node --check test/dom-evidence.test.mjs && node --check test/cli.test.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/**",
+    "example": "node bin/screen-reader-landmark-map.mjs --snapshot examples/docs-clean.html",
+    "pack:check": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run example && npm run pack:check"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/edilec/screen-reader-landmark-map"
-  }
+    "url": "git+https://github.com/edilec/screen-reader-landmark-map.git"
+  },
+  "bin": {
+    "screen-reader-landmark-map": "./bin/screen-reader-landmark-map.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "landmarks",
+    "headings",
+    "aria",
+    "accessibility",
+    "dom-snapshot",
+    "outline",
+    "cli"
+  ],
+  "author": "Edilec Private Limited",
+  "bugs": {
+    "url": "https://github.com/edilec/screen-reader-landmark-map/issues"
+  },
+  "homepage": "https://github.com/edilec/screen-reader-landmark-map#readme"
 }
