@@ -193,3 +193,23 @@ test('the element and depth limits stop the parse rather than truncating it', ()
     (error) => error.ruleId === 'depth-exceeded',
   )
 })
+
+test('a raw text element ends at its first end tag, whatever its text contains', () => {
+  // Raw text elements cannot nest, so counting `<script` occurrences inside one
+  // would treat the STRING "<script>" as a real nested element and run off the
+  // end of the document looking for a second end tag.
+  const parsed = parse('<script>var s = "<script>x";</script><h1>Real</h1>')
+  assert.deepEqual(paths(parsed), ['/script[1]', '/h1[1]'])
+  assert.deepEqual(rules(parsed), [])
+})
+
+test('a template CAN nest, so its end tag is counted', () => {
+  const parsed = parse('<template><template><p>x</p></template></template><h1>Real</h1>')
+  assert.deepEqual(paths(parsed), ['/template[1]', '/h1[1]'])
+  assert.deepEqual(rules(parsed), ['template-content-skipped'])
+})
+
+test('a nested svg does not end the outer one early', () => {
+  const parsed = parse('<svg><svg><circle/></svg></svg><h1>Real</h1>')
+  assert.deepEqual(paths(parsed), ['/svg[1]', '/h1[1]'])
+})

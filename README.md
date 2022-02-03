@@ -64,16 +64,27 @@ incomplete either way.
 node bin/screen-reader-landmark-map.mjs --snapshot examples/docs-clean.html
 ```
 
+The JSON report goes to stdout; this is the start of the summary on stderr:
+
 ```
 screen-reader-landmark-map: status pass
 1 document(s), 43 element(s); 8 landmark(s), 6 heading(s).
 0 unresolved name(s), 0 region(s) this snapshot does not contain.
+0 error, 0 warning, 4 info.
+This map is built from exported DOM snapshots read with a bounded HTML subset. No
+browser is opened and no assistive technology is run, so the outline is document
+order rather than announcement order, and what a screen reader actually announces
+requires separate manual evidence.
 outline docs-clean.html
   banner "" /html[1]/body[1]/header[1]
     navigation "Primary" /html[1]/body[1]/header[1]/nav[1]
   main "" /html[1]/body[1]/main[1]
     h1 "Deployment handbook" /html[1]/body[1]/main[1]/h1[1]
+    ...
 ```
+
+(The paragraph is one line in the real output; it is wrapped here. The outline
+continues for the rest of the document, and the four info findings follow it.)
 
 Three examples, three exit codes:
 

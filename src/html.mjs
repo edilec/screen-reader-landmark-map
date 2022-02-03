@@ -237,8 +237,16 @@ export function parseHtml(source, limits) {
     }
   }
 
-  /** Consume to the matching end tag of `tag`, counting nesting. Returns the raw inside. */
-  const skipTo = (tag, from) => {
+  /**
+   * Consume to the matching end tag of `tag`. Returns the raw inside.
+   *
+   * `nestable` matters: `template`, `svg` and `math` can contain another of
+   * themselves, so their end tag has to be counted. A raw text element cannot
+   * -- `<script>` holds text, not elements -- so counting there would treat the
+   * string `"<script>"` inside a script as a real nested element and run off
+   * the end of the document looking for a second end tag.
+   */
+  const skipTo = (tag, from, nestable = false) => {
     const open = new RegExp(`<${tag}(?=[\\s/>])`, 'gi')
     const close = new RegExp(`</${tag}\\s*>`, 'gi')
     let depth = 1
@@ -247,10 +255,12 @@ export function parseHtml(source, limits) {
       close.lastIndex = cursor
       const end = close.exec(source)
       if (end === null) return null
-      open.lastIndex = cursor
       let nested = 0
-      let match
-      while ((match = open.exec(source)) !== null && match.index < end.index) nested += 1
+      if (nestable) {
+        open.lastIndex = cursor
+        let match
+        while ((match = open.exec(source)) !== null && match.index < end.index) nested += 1
+      }
       depth += nested - 1
       cursor = end.index + end[0].length
       if (depth <= 0) return { inside: source.slice(from, end.index), next: cursor }
@@ -457,7 +467,7 @@ export function parseHtml(source, limits) {
     }
 
     if (OPAQUE.includes(tag)) {
-      const skipped = skipTo(tag, index)
+      const skipped = skipTo(tag, index, true)
       const inside = skipped === null ? source.slice(index) : skipped.inside
       index = skipped === null ? source.length : skipped.next
       if (skipped === null) {
