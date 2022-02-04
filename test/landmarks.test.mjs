@@ -190,3 +190,54 @@ test('the outline nests landmarks by their position in the markup', async (t) =>
     ],
   )
 })
+
+test('a section whose name reference is unresolved is NOT quietly demoted to no landmark', async (t) => {
+  // `section` is a region only when it is named. An unresolved reference means
+  // this document cannot say whether it is named, so it cannot say whether the
+  // element is a landmark either. Answering "not a landmark" would be a
+  // positive claim about a region the evidence cannot see.
+  const report = await mapDocument(
+    t,
+    '<body><section aria-labelledby="not-in-this-document"><p>x</p></section>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.equal(report.status, 'incomplete')
+  assert.deepEqual(ruleIds(report, 'name-reference-unresolved'), ['/body[1]/section[1]'])
+  const region = report.documents[0].outline.find((entry) => entry.role === 'region')
+  assert.equal(region.pointer, '/body[1]/section[1]')
+  assert.equal(region.name, null)
+})
+
+test('a section that is definitely unnamed IS demoted, so the rule still bites', async (t) => {
+  const report = await mapDocument(
+    t,
+    '<body><section><p>x</p></section><main><h1>Catalogue</h1></main></body>',
+  )
+  assert.equal(report.status, 'pass')
+  assert.deepEqual(
+    report.documents[0].outline.filter((entry) => entry.role === 'region'),
+    [],
+  )
+})
+
+test('a form whose name reference is unresolved is not demoted either', async (t) => {
+  const report = await mapDocument(
+    t,
+    '<body><form aria-labelledby="gone"><input type="text"></form>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.equal(report.status, 'incomplete')
+  const forms = report.documents[0].outline.filter((entry) => entry.role === 'form')
+  assert.deepEqual(forms.map((entry) => entry.name), [null])
+})
+
+test('a nested aside whose name reference is unresolved is not demoted either', async (t) => {
+  const report = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1>'
+      + '<article><aside aria-labelledby="gone"><p>x</p></aside></article></main></body>',
+  )
+  assert.equal(report.status, 'incomplete')
+  const asides = report.documents[0].outline.filter((entry) => entry.role === 'complementary')
+  assert.deepEqual(asides.map((entry) => entry.name), [null])
+})

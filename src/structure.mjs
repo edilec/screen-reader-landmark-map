@@ -148,7 +148,17 @@ export function declaredRole(element) {
   return { role: declared }
 }
 
-/** The implicit landmark role of an element, given whether it has a name. */
+/**
+ * The implicit landmark role of an element.
+ *
+ * `hasName` is a THREE-valued answer and the third value is the point of it.
+ * `section` and `form` are landmarks only when they are named, so an element
+ * whose name reference this document cannot resolve has an UNKNOWN role -- and
+ * `null` here would quietly turn that unknown into "not a landmark", which is
+ * a positive claim about a region the evidence cannot see. `hasName === null`
+ * therefore keeps the role, and the caller reports it with an undetermined
+ * name and marks the run incomplete.
+ */
 export function implicitLandmarkRole(element, hasName) {
   const tag = element.tag
   if (tag === 'header' || tag === 'footer') {
@@ -157,10 +167,10 @@ export function implicitLandmarkRole(element, hasName) {
   }
   const role = IMPLICIT_LANDMARK[tag]
   if (role === undefined) return null
-  if (NEEDS_NAME_TO_BE_A_LANDMARK.includes(role) && !hasName) return null
+  if (NEEDS_NAME_TO_BE_A_LANDMARK.includes(role) && hasName === false) return null
   // A nested `aside` is complementary only when it is named; otherwise it is
   // generic, which is what the HTML accessibility mapping says.
-  if (role === 'complementary' && hasSectioningAncestor(element) && !hasName) return null
+  if (role === 'complementary' && hasSectioningAncestor(element) && hasName === false) return null
   return role
 }
 
@@ -221,7 +231,7 @@ export function mapStructure(root, index) {
       } else {
         const hasName =
           named.unresolved === true ? null : named.source !== null && isPerceivable(named.name)
-        const implicit = implicitLandmarkRole(element, hasName === true)
+        const implicit = implicitLandmarkRole(element, hasName)
         const role = declared.role !== null ? declared.role : implicit
 
         if (role !== null && LANDMARK_ROLES.includes(role)) {

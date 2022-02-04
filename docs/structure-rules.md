@@ -86,6 +86,12 @@ is `name-reference-unresolved`. Such a landmark is **left out of the duplicate c
 than counted as unnamed, and the run is incomplete, so the comparison is never reported as clean
 on evidence that was dropped while making it.
 
+`section`, `form` and a nested `aside` are landmarks **only when they are named**, so an unresolved
+reference on one of them leaves its role unknown too. The element is kept as a landmark with an
+undetermined name rather than being demoted to no landmark at all, because "this is not a landmark"
+would be a positive claim about a region the evidence cannot see. An element that is *definitely*
+unnamed is still demoted, so the rule keeps biting.
+
 ## Headings
 
 `h1`–`h6`, and any element with `role="heading"`. `aria-level` overrides the tag's level; a
