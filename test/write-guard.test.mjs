@@ -190,3 +190,63 @@ test('nothing is written when no --out is given', async (t) => {
   assert.equal(run.code, 0)
   assert.deepEqual((await readdir(directory)).sort(), before)
 })
+
+test('a destination that cannot even be inspected is refused', async (t) => {
+  const directory = await workspace(t)
+  // The parent is a regular file, so lstat fails with ENOTDIR rather than
+  // ENOENT: an error that is not "it does not exist yet" is a refusal, not a
+  // green light.
+  const out = join(directory, 'page.html', 'report.json')
+  const run = await runCli(['--snapshot', join(directory, 'page.html'), '--out', out])
+  assert.equal(run.code, 2)
+  assert.equal(run.stdout, '')
+  assert.match(run.stderr, /could not be inspected/)
+})
+
+test('the guard confines a destination when a caller DOES pass a root', async (t) => {
+  // This tool passes null, and says so. The guard is copied verbatim, so the
+  // root branch is pinned here rather than left to rot: a future caller that
+  // does pass a root has to get confinement, and the branch is the only thing
+  // that provides it.
+  const directory = await workspace(t)
+  const inside = join(directory, 'inside')
+  const outside = join(directory, 'outside')
+  await mkdir(inside)
+  await mkdir(outside)
+
+  assert.equal(
+    await assertWritableDestination(join(inside, 'report.json'), { inputs: [], root: inside }),
+    join(inside, 'report.json'),
+  )
+  await assert.rejects(
+    () => assertWritableDestination(join(outside, 'report.json'), { inputs: [], root: inside }),
+    /outside the permitted root/,
+  )
+  // A symbolically linked parent does not widen the root either.
+  const linked = join(inside, 'linked')
+  await symlink(outside, linked)
+  await assert.rejects(
+    () => assertWritableDestination(join(linked, 'report.json'), { inputs: [], root: inside }),
+    /outside the permitted root/,
+  )
+})
+
+test('the library refuses a call with no snapshots, by its own message', async () => {
+  const { mapSnapshots } = await import('../src/index.mjs')
+  await assert.rejects(() => mapSnapshots({}), /At least one --snapshot is required/)
+  await assert.rejects(() => mapSnapshots({ snapshots: [] }), /At least one --snapshot is required/)
+  await assert.rejects(() => mapSnapshots(), /At least one --snapshot is required/)
+  await assert.rejects(() => mapSnapshots({ snapshots: [7] }), /Every --snapshot must be a path/)
+  await assert.rejects(() => mapSnapshots({ snapshots: [''] }), /Every --snapshot must be a path/)
+})
+
+test('a snapshot path that is a directory is refused as unreadable', async (t) => {
+  const directory = await workspace(t)
+  const inner = join(directory, 'not-a-file')
+  await mkdir(inner)
+  const run = await runCli(['--snapshot', inner, '--json'])
+  const report = JSON.parse(run.stdout)
+  assert.equal(run.code, 2)
+  assert.equal(report.findings[0].ruleId, 'snapshot-unreadable')
+  assert.match(report.findings[0].message, /not a regular file/)
+})

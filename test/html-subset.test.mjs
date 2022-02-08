@@ -213,3 +213,58 @@ test('a nested svg does not end the outer one early', () => {
   const parsed = parse('<svg><svg><circle/></svg></svg><h1>Real</h1>')
   assert.deepEqual(paths(parsed), ['/svg[1]', '/h1[1]'])
 })
+
+test('a numeric character reference outside Unicode is reported, not decoded', () => {
+  const problems = []
+  // The numeric branch has its own refusal: a code point past U+10FFFF and a
+  // lone surrogate are both outside what a document may legally say.
+  assert.equal(decodeReferences('a&#1114112;b', problems, ''), 'a&#1114112;b')
+  assert.equal(decodeReferences('a&#xD800;b', problems, ''), 'a&#xD800;b')
+  assert.deepEqual(
+    problems.map((problem) => problem.ruleId),
+    ['entity-unsupported', 'entity-unsupported'],
+  )
+})
+
+test('an end tag for a void element matches nothing that is open', () => {
+  const parsed = parse('<p>a<br>b</br></p>')
+  assert.deepEqual(rules(parsed), ['stray-end-tag'])
+})
+
+test('each refused construct carries the message that says which check refused it', () => {
+  // Several of these fall through to a LATER refusal when one is removed, with
+  // the same rule id and the same exception type, so the type alone cannot
+  // tell them apart.
+  const cases = [
+    ['<p><![CDATA[x]]></p>', /CDATA section is outside the subset/],
+    ['<?xml version="1.0"?><p>x</p>', /processing instruction is outside the subset/],
+    ['<!ENTITY x "y"><p>x</p>', /markup declaration this tool does not read/],
+    ['<!doctype html', /doctype is never closed/],
+    ['<div ', /The <div> tag is never closed/],
+    ['<div =x>', /cannot read as an attribute/],
+    ['<div class="a', /attribute value in <div> is never closed/],
+    ['<!-- never closed', /comment is never closed/],
+  ]
+  for (const [source, expected] of cases) {
+    assert.throws(
+      () => parse(source),
+      (error) => {
+        assert.ok(error instanceof HtmlError, `${source} did not raise HtmlError`)
+        assert.equal(error.ruleId, 'html-construct-unsupported')
+        assert.match(error.message, expected)
+        return true
+      },
+      `for ${JSON.stringify(source)}`,
+    )
+  }
+})
+
+test('a raw text, escapable raw text or opaque element with no end tag is reported', () => {
+  for (const source of ['<script>x', '<title>x', '<svg><circle/>', '<textarea>x', '<iframe>x']) {
+    const parsed = parse(source)
+    assert.ok(
+      rules(parsed).includes('unclosed-element'),
+      `${source} produced ${rules(parsed).join(', ')}`,
+    )
+  }
+})
