@@ -126,6 +126,45 @@ test('an aria-hidden subtree contributes nothing to a heading name', async (t) =
   assert.equal(report.documents[0].outline[1].name, 'Catalogue')
 })
 
+test('a heading whose aria-labelledby resolves to nothing keeps its own text', async (t) => {
+  // Step 2B returns the accumulated text only if it is NOT EMPTY, so the
+  // computation falls through to the heading's contents. Short-circuiting
+  // here reported a heading reading "Deployment handbook" as having no
+  // accessible name, at error severity, and exited 1.
+  const report = await mapDocument(
+    t,
+    '<main><h1 aria-labelledby="blank">Deployment handbook</h1><span id="blank"></span></main>',
+  )
+  assert.deepEqual(found(report, 'heading-empty'), [])
+  assert.equal(report.status, 'pass')
+  assert.equal(report.documents[0].outline[1].name, 'Deployment handbook')
+})
+
+test('a heading with no text of its own and an empty reference IS empty', async (t) => {
+  // The mirror: falling through must not invent a name.
+  const report = await mapDocument(
+    t,
+    '<main><h1 aria-labelledby="blank"></h1><span id="blank"></span></main>',
+  )
+  assert.deepEqual(
+    found(report, 'heading-empty').map((finding) => finding.location.pointer),
+    ['/main[1]/h1[1]'],
+  )
+  assert.equal(report.status, 'fail')
+})
+
+test('a heading named by an aria-hidden element is named, not empty', async (t) => {
+  // Step 2A again, on the heading side: a directly referenced node
+  // contributes even when it is hidden.
+  const report = await mapDocument(
+    t,
+    '<main><h1 aria-labelledby="l"></h1><span id="l" aria-hidden="true">Catalogue</span></main>',
+  )
+  assert.deepEqual(found(report, 'heading-empty'), [])
+  assert.equal(report.documents[0].outline[1].name, 'Catalogue')
+  assert.equal(report.status, 'pass')
+})
+
 test('a heading whose name reference is unresolved is never called empty', async (t) => {
   // "This heading is empty" would be a claim about text the document does not
   // contain. The level is still known, so it stays in the hierarchy check.

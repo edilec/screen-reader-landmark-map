@@ -81,6 +81,19 @@ not mapped, and the run is incomplete.
 headings — the element's text with `aria-hidden="true"` subtrees removed, then `title`. This is
 narrower than the full accessible name computation and it is not a substitute for it.
 
+Two details of that computation are implemented here on purpose, and both are stated so a reader
+can check them against the specification rather than trust this tool:
+
+- **Step 2A.** A node referenced **directly** by `aria-labelledby` contributes its text *even when
+  it carries `aria-hidden="true"`*. The reference is the author saying "this element is the label".
+  The exception covers the referenced node itself and not its descendants: an `aria-hidden` element
+  *inside* it still contributes nothing. The sister tool `aria-name-explainer` implements and pins
+  the same rule, and the two tools answer the same markup the same way.
+- **Step 2B.** The text accumulated from `aria-labelledby` is returned **only when it is not
+  empty**. A reference that resolves to an element with no perceivable text falls through to
+  `aria-label`, then to the contents, then to `title` — exactly as an empty `aria-label` does. It
+  does not settle the name as "unnamed".
+
 A reference naming nothing this document contains, or naming an id more than one element carries,
 is `name-reference-unresolved`. Such a landmark is **left out of the duplicate comparison** rather
 than counted as unnamed, and the run is incomplete, so the comparison is never reported as clean

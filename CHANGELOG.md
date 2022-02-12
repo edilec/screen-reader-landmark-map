@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 Renaming a `ruleId` is a breaking change and is recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- A node referenced directly by `aria-labelledby` now contributes its text even when it carries
+  `aria-hidden="true"`, which is what step 2A of the accessible name computation says. It
+  contributed nothing, so a navigation region labelled by a visually hidden span was reported twice
+  over as `duplicate-unlabelled-landmark` at error severity and the run exited 1 on correct markup.
+  The exception covers the referenced node only; an `aria-hidden` element inside it still
+  contributes nothing.
+- An `aria-labelledby` that resolves to empty text now falls through to `aria-label`, the contents
+  and `title`, which is what step 2B says: the accumulated text is returned only when it is not
+  empty. The name was settled as empty instead, so a heading with visible text was reported as
+  `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
+  severity, both exit 1.
+
 ## [0.1.0]
 
 ### Added

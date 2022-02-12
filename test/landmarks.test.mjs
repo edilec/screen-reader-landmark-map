@@ -56,6 +56,75 @@ test('two LABELLED navigation regions are not reported', async (t) => {
   assert.equal(report.status, 'pass')
 })
 
+test('an aria-hidden element referenced by aria-labelledby still supplies the name', async (t) => {
+  // Step 2A of the accessible name computation: a node referenced DIRECTLY by
+  // aria-labelledby contributes its text even when it carries
+  // aria-hidden="true". Treating it as contributing nothing reported TWO
+  // error-severity duplicate-unlabelled-landmark findings, exit 1, for a page
+  // where one of the two navigation regions is named "Primary" -- and the
+  // sister tool aria-name-explainer answered the same construct correctly, so
+  // the two tools disagreed on one spec rule.
+  const report = await mapDocument(
+    t,
+    '<body><span id="l" aria-hidden="true">Primary</span>'
+      + '<nav aria-labelledby="l"><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [])
+  assert.equal(report.status, 'pass')
+  const nav = report.documents[0].outline.find((entry) => entry.role === 'navigation')
+  assert.equal(nav.name, 'Primary')
+})
+
+test('the exception is the referenced node itself, not an aria-hidden child of it', async (t) => {
+  // The mirror: hidden text INSIDE the referenced element is still removed,
+  // so widening the exception one level too far would fail here.
+  const report = await mapDocument(
+    t,
+    '<body><span id="l">Primary<span aria-hidden="true"> (draft)</span></span>'
+      + '<nav aria-labelledby="l"><a href="/">Home</a></nav>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  const nav = report.documents[0].outline.find((entry) => entry.role === 'navigation')
+  assert.equal(nav.name, 'Primary')
+})
+
+test('an aria-labelledby that resolves to empty text falls through to aria-label', async (t) => {
+  // Step 2B returns the accumulated text only if it is NOT EMPTY. Returning
+  // an empty name here reported a nav carrying aria-label="Primary" as
+  // unlabelled, so two navigation regions came back as a duplicate pair at
+  // error severity on correct markup.
+  const report = await mapDocument(
+    t,
+    '<body><span id="blank"></span>'
+      + '<nav aria-labelledby="blank" aria-label="Primary"><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [])
+  assert.equal(report.status, 'pass')
+  const nav = report.documents[0].outline.find((entry) => entry.role === 'navigation')
+  assert.equal(nav.name, 'Primary')
+})
+
+test('falling through does not invent a name: with nothing below it, the rule still bites', async (t) => {
+  // The mirror of the two tests above. Honesty about an empty reference must
+  // not become a refusal to report the defect: this nav really is unnamed.
+  const report = await mapDocument(
+    t,
+    '<body><span id="blank"></span>'
+      + '<nav aria-labelledby="blank"><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [
+    '/body[1]/nav[1]',
+    '/body[1]/nav[2]',
+  ])
+  assert.equal(report.status, 'fail')
+})
+
 test('one unlabelled navigation region on its own is not reported', async (t) => {
   const report = await mapDocument(
     t,

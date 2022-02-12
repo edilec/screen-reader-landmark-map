@@ -88,16 +88,27 @@ function hasSectioningAncestor(element) {
 }
 
 /**
- * The text an element contributes to its own name.
+ * The text an element contributes to a name.
  *
  * `aria-hidden="true"` removes a subtree from the accessibility tree, so its
- * text is not part of any name. Nothing else is modelled: this is the DOM's
- * text, not a rendering, and CSS that hides or generates text is not in the
- * snapshot.
+ * text is not part of any name -- with ONE exception, and the exception is
+ * step 2A of the accessible name computation: a node referenced DIRECTLY by
+ * `aria-labelledby` contributes its text even when it is hidden. The
+ * reference is the author saying "this element is the label", and hiding it
+ * does not withdraw that. It is deliberate specification behaviour, it
+ * surprises people, and the sister tool `aria-name-explainer` implements the
+ * same rule.
+ *
+ * The exception is for the referenced node ITSELF. An `aria-hidden` element
+ * inside it still contributes nothing, which is why the recursive call passes
+ * no options.
+ *
+ * Nothing else is modelled: this is the DOM's text, not a rendering, and CSS
+ * that hides or generates text is not in the snapshot.
  */
-export function textContent(element) {
+export function textContent(element, { directReference = false } = {}) {
   if (element.kind === 'text') return element.text
-  if (attribute(element, 'aria-hidden') === 'true') return ''
+  if (!directReference && attribute(element, 'aria-hidden') === 'true') return ''
   return element.children.map((child) => textContent(child)).join(' ')
 }
 
@@ -117,11 +128,16 @@ export function accessibleName(element, index, { fromContent }) {
       if (targets === undefined || targets.length !== 1) {
         return { unresolved: true, reference }
       }
-      parts.push(textContent(targets[0]))
+      parts.push(textContent(targets[0], { directReference: true }))
     }
     const name = renderText(parts.join(' '))
     if (isPerceivable(name)) return { name, source: 'aria-labelledby' }
-    return { name: '', source: null }
+    // Step 2B of the computation returns the accumulated text only IF IT IS
+    // NOT EMPTY; a reference that resolves to nothing perceivable falls
+    // through to the next source, exactly as an empty `aria-label` does.
+    // Returning here reported a heading whose own text is visible, and a
+    // landmark carrying an `aria-label`, as having no accessible name -- at
+    // error severity, on correct markup.
   }
 
   const label = attribute(element, 'aria-label')
