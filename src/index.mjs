@@ -390,15 +390,21 @@ export async function mapSnapshots({ snapshots, limits: overrides = {}, out = nu
   }
   const limits = validateLimits(overrides)
 
+  // A snapshot's file name is somebody's file name: untrusted text that ends
+  // up in `location.file`, in `documents[].file` and on a line of the human
+  // summary. It is flattened HERE, once, and the flattened form is what the
+  // run is keyed on -- so two names that differ only in characters this tool
+  // strips are refused as a collision rather than reported as one name twice,
+  // which is the very thing the check below exists to prevent.
   const names = new Map()
   for (const snapshot of snapshots) {
     if (typeof snapshot !== 'string' || snapshot === '') {
       throw new ConfigError('Every --snapshot must be a path')
     }
-    const name = basename(snapshot)
+    const name = singleLine(basename(snapshot))
     if (names.has(name)) {
       throw new ConfigError(
-        `Two snapshots are both named "${singleLine(name)}", so a finding could not say which one it came from. Rename one, or run them separately.`,
+        `Two snapshots are both named "${name}", so a finding could not say which one it came from. Rename one, or run them separately.`,
       )
     }
     names.set(name, snapshot)

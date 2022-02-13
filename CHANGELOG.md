@@ -21,6 +21,11 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   empty. The name was settled as empty instead, so a heading with visible text was reported as
   `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
   severity, both exit 1.
+- A snapshot's file name is flattened like every other untrusted string. `documents[].file` carried
+  the raw basename, so a file name holding U+000A forged a whole line of the human summary in the
+  shape of a finding, and U+202E reversed the display after it. The uniqueness check that keeps two
+  documents apart is now made on the flattened name, so two names that differ only in stripped
+  characters are refused rather than reported as one name twice.
 
 ## [0.1.0]
 

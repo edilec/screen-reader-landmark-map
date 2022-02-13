@@ -53,14 +53,23 @@ function runCli(args) {
   })
 }
 
-async function report(t, html) {
+async function report(t, html, name = 'page.html') {
   const directory = await mkdtemp(join(tmpdir(), 'srlm-sanitise-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
-  const file = join(directory, 'page.html')
+  const file = join(directory, name)
   await writeFile(file, html)
   const run = await runCli(['--snapshot', file])
   return { run, parsed: JSON.parse(run.stdout) }
 }
+
+/**
+ * A file NAME is untrusted text too, and it is the one identifier that comes
+ * from the caller rather than from the document. It reaches
+ * `documents[].file`, every finding's `location.file`, and a line of the
+ * human summary.
+ */
+const HOSTILE_NAME =
+  'page\u000aERROR   forged line heading-empty Invented\u009b\u202e\u2028.html'
 
 for (const [name, character] of Object.entries(CLASSES)) {
   test(`${name} is flattened out of every string that reaches output`, () => {
@@ -109,10 +118,21 @@ test('an unprintable in a heading name cannot forge a line of the outline', asyn
 
 test('no string anywhere in a hostile report carries a stripped character', async (t) => {
   const hostile = '\u0085\u009b\u202e\u2028'
-  const { parsed } = await report(
+  // The snapshot is written under a hostile NAME as well as hostile content,
+  // because "anywhere" has to include the one string that does not come from
+  // the document. An earlier version of this test walked the whole report but
+  // wrote the file as "page.html", so `documents[].file` -- the one string
+  // the tool never flattened -- was never reached by the walk.
+  const { run, parsed } = await report(
     t,
     `<main><h1 id="a${hostile}">T${hostile}</h1><h2 id="a${hostile}">B</h2>`
       + `<div role="q${hostile}">x</div><nav aria-labelledby="gone${hostile}"><a href="/">z</a></nav></main>`,
+    HOSTILE_NAME,
+  )
+  assert.ok(parsed.documents[0].file.startsWith('page '))
+  assert.deepEqual(
+    run.stderr.split('\n').filter((line) => line.startsWith('ERROR   forged')),
+    [],
   )
   const walk = (value) => {
     if (typeof value === 'string') {
@@ -121,6 +141,44 @@ test('no string anywhere in a hostile report carries a stripped character', asyn
     else if (value !== null && typeof value === 'object') Object.values(value).forEach(walk)
   }
   walk(parsed)
+})
+
+test('a hostile snapshot NAME cannot forge a line of the human summary', async (t) => {
+  // documents[].file is printed as `outline <name>` on stderr, so a newline
+  // in the file name puts a whole line of the tool's own format into the
+  // summary. The run itself is a clean pass, which is what makes it bad: a
+  // forged ERROR line appears in a report that found nothing.
+  const { run, parsed } = await report(
+    t,
+    '<html><body><main><h1>Title</h1></main></body></html>',
+    HOSTILE_NAME,
+  )
+  assert.equal(run.code, 0)
+  assert.equal(parsed.status, 'pass')
+  assert.ok(!FORBIDDEN.test(parsed.documents[0].file))
+  // Line by line: the summary is a multi-line report, so the newlines it puts
+  // there itself are not what this is looking for.
+  for (const line of run.stderr.split('\n')) {
+    assert.ok(!line.startsWith('ERROR'), line)
+    assert.ok(!FORBIDDEN.test(line), line)
+  }
+})
+
+test('two snapshot names that differ only in stripped characters are refused', async (t) => {
+  // The uniqueness check exists so that a finding can say which document it
+  // came from. Two names that flatten to one string cannot be told apart in
+  // the report, so the check is made on the flattened form.
+  const directory = await mkdtemp(join(tmpdir(), 'srlm-sanitise-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const first = join(directory, 'page\u0085one.html')
+  const second = join(directory, 'page\u2028one.html')
+  for (const file of [first, second]) await writeFile(file, '<main><h1>Title</h1></main>')
+
+  const run = await runCli(['--snapshot', first, '--snapshot', second])
+  assert.equal(run.code, 2)
+  assert.equal(run.stdout, '')
+  assert.match(run.stderr, /Two snapshots are both named/)
+  for (const line of run.stderr.split('\n')) assert.ok(!FORBIDDEN.test(line), line)
 })
 
 test('a value that cannot be turned into a string is described by its shape', () => {
