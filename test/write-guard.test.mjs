@@ -5,7 +5,7 @@ import { link, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFi
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import { DestinationError, assertWritableDestination } from '../src/index.mjs'
+import { ConfigError, DestinationError, assertWritableDestination, mapSnapshots } from '../src/index.mjs'
 
 /**
  * The destination guard, one test per hole and one per allowed case.
@@ -170,6 +170,28 @@ test('the guard raises DestinationError rather than a bare Error', async (t) => 
   await assert.rejects(
     () => assertWritableDestination(out, { inputs: [join(directory, 'page.html')], root: null }),
     DestinationError,
+  )
+})
+
+test('mapSnapshots re-raises a refused destination as a ConfigError', async (t) => {
+  // A refused destination is a CONFIGURATION error: the contract gives it
+  // empty stdout and no report, which is the shape mapSnapshots' callers key
+  // on. The CLI prints error.message for every error alike, so deleting this
+  // conversion changes nothing a CLI test can see -- a library consumer
+  // simply stops seeing ConfigError. The type is asserted directly.
+  const directory = await workspace(t)
+  const page = join(directory, 'page.html')
+  const out = join(directory, 'report.json')
+  await symlink(page, out)
+
+  await assert.rejects(
+    () => mapSnapshots({ snapshots: [page], out }),
+    (error) => {
+      assert.ok(error instanceof ConfigError, `raised ${error.name}`)
+      assert.ok(!(error instanceof DestinationError))
+      assert.match(error.message, /symbolic link/)
+      return true
+    },
   )
 })
 

@@ -91,11 +91,44 @@ test('maxFindings accepts exactly the limit and truncates one more', async (t) =
 })
 
 test('an unknown limit name is rejected rather than ignored', () => {
-  assert.throws(() => validateLimits({ maxElementz: 5 }), TypeError)
-  assert.throws(() => validateLimits({ maxElements: 0 }), TypeError)
-  assert.throws(() => validateLimits({ maxElements: 1.5 }), TypeError)
-  assert.throws(() => validateLimits('nope'), TypeError)
+  assert.throws(() => validateLimits({ maxElementz: 5 }), /Unknown limit "maxElementz"/)
+  assert.throws(() => validateLimits({ maxElements: 0 }), /must be a positive integer/)
+  assert.throws(() => validateLimits({ maxElements: 1.5 }), /must be a positive integer/)
   assert.deepEqual(validateLimits({}), DEFAULT_LIMITS)
+})
+
+test('a limits value that is not an object is refused, by the check that refuses it', () => {
+  // Asserting only the TYPE here is what left this guard undefended: a string
+  // still throws a TypeError from the NEXT check ('Unknown limit "0"',
+  // because Object.entries("nope") yields index keys), so the precondition
+  // could be deleted with the suite green -- and then [], 42 and true stopped
+  // being refused at all and quietly became "defaults accepted".
+  for (const value of [[], 42, true, null, 'nope']) {
+    assert.throws(
+      () => validateLimits(value),
+      /Limits must be an object/,
+      `${JSON.stringify(value)} was not refused by the precondition`,
+    )
+  }
+})
+
+test('a landmark label longer than the bound is reported bounded, in the outline', async (t) => {
+  // The 160-character bound on reported text is real in the code and was
+  // asserted nowhere: removing it reproduced a 5000-character attribute value
+  // verbatim into the outline and into a finding message, with the whole
+  // suite green.
+  const long = 'S'.repeat(5000)
+  const file = await write(t, `<main aria-label="${long}"><h1>Catalogue</h1></main>`)
+  const run = await runCli(['--snapshot', file, '--json'])
+  const outline = JSON.parse(run.stdout).documents[0].outline
+  assert.equal(outline[0].name.length, 163)
+  assert.ok(outline[0].name.endsWith('...'))
+
+  // The mirror: a label that fits is reported whole, with no ellipsis.
+  const short = 'S'.repeat(160)
+  const fits = await write(t, `<main aria-label="${short}"><h1>Catalogue</h1></main>`, 'fits.html')
+  const kept = JSON.parse((await runCli(['--snapshot', fits, '--json'])).stdout)
+  assert.equal(kept.documents[0].outline[0].name, short)
 })
 
 test('an unknown CLI option exits 2 with empty stdout', async () => {

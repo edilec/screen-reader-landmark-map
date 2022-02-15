@@ -16,6 +16,26 @@ const parse = (source, limits = DEFAULT_LIMITS) => parseHtml(source, limits)
 const rules = (parsed) => parsed.problems.map((problem) => problem.ruleId)
 const paths = (parsed) => parsed.elements.map((element) => element.path)
 
+test('the parser refuses a source that is not a string, rather than reading nothing', () => {
+  // Without this precondition `index < source.length` is false immediately,
+  // so a non-string source parses to an EMPTY TREE and is reported as
+  // `empty-snapshot` -- a claim about a document that was never read.
+  for (const source of [42, null, undefined, ['<main></main>'], { source: '<main></main>' }]) {
+    assert.throws(() => parseHtml(source, DEFAULT_LIMITS), /The snapshot text must be a string/)
+  }
+  assert.deepEqual(rules(parse('<main><h1>A</h1></main>')), [])
+})
+
+test('the parser refuses a limits value that is not an object', () => {
+  // Without this precondition every limit comparison becomes `n > undefined`,
+  // which is false, so maxElements and maxDepth are not enforced AT ALL --
+  // the contract's "a documented limit never enforced" defect class, reached
+  // by a caller passing the wrong shape rather than by a missing check.
+  for (const limits of ['nope', 42, null, [], undefined]) {
+    assert.throws(() => parseHtml('<main></main>', limits), /Limits must be an object/)
+  }
+})
+
 test('attributes are read in all three quoting styles', () => {
   const parsed = parse('<div id="a" class=\'b c\' data-x=plain hidden></div>')
   const attributes = parsed.elements[0].attributes
