@@ -46,6 +46,14 @@ incomplete, with the finding saying which comparison could not be completed. Dro
 unreadable side and then asserting the remaining ones are fine is the exact defect this rule
 exists to prevent.
 
+The same rule applies to the heading hierarchy. The heading list is the part of the page that was
+read, so a level jump **across** an unread region, and "this document declares no heading" or "no
+main landmark" for a document with an unread region in it, are claims about markup the file does
+not contain, and they are withheld. The region keeps its own finding and the run stays
+`incomplete`, so what is withheld is the verdict, not the evidence — and a level jump with nothing
+unread between the two headings is still reported. The table is in
+[docs/structure-rules.md](./docs/structure-rules.md).
+
 ## It is not an HTML parser
 
 It reads a **bounded, explicit subset** of HTML and refuses the rest. The subset is listed in

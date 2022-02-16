@@ -136,6 +136,30 @@ test('an unresolved landmark name is dropped from the comparison AND the run is 
   assert.match(unresolved.message, /duplicate-landmark comparison for navigation/)
 })
 
+test('no-main-landmark is not asserted when a region of the page was not read', async (t) => {
+  // The main landmark is inside the shadow root, so "this document declares
+  // no main landmark" is a claim about markup the file does not contain --
+  // the same mistake as asserting a duplicate comparison over a landmark that
+  // was dropped while making it. The unread region is named and the run is
+  // incomplete; what is withheld is the verdict, not the evidence.
+  const { run, parsed } = await report(
+    t,
+    '<body><my-el><template shadowrootmode="open"><main><h1>Real</h1></main></template></my-el>'
+      + '<h1>Title</h1></body>',
+  )
+  assert.ok(!parsed.findings.some((f) => f.ruleId === 'no-main-landmark'))
+  assert.ok(parsed.findings.some((f) => f.ruleId === 'shadow-root-not-traversed'))
+  assert.equal(parsed.status, 'incomplete')
+  assert.equal(run.code, 2)
+})
+
+test('a document with no main landmark and nothing unread IS reported, so the rule still bites', async (t) => {
+  const { run, parsed } = await report(t, '<body><h1>Title</h1><p>Prose.</p></body>')
+  assert.ok(parsed.findings.some((f) => f.ruleId === 'no-main-landmark'))
+  assert.equal(parsed.status, 'pass')
+  assert.equal(run.code, 0)
+})
+
 test('the same markup with the reference RESOLVED reports the duplicate, so the rule still bites', async (t) => {
   // The mirror image of the test above: honesty about unknowns must not become
   // a refusal to ever report anything.

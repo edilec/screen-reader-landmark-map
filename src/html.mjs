@@ -34,6 +34,10 @@
  *   the content of an iframe, which is another      iframe-content-unavailable
  *     document and is not in this file
  *   HTML inside an SVG foreignObject                foreign-content-skipped
+ *
+ * Each of those elements is flagged `unread`, and the structure pass uses
+ * that: a claim about the heading hierarchy ACROSS a region nobody read is a
+ * claim about markup this file does not contain.
  */
 
 import { excerpt, isRecord, singleLine } from './rules.mjs'
@@ -189,6 +193,10 @@ export function parseHtml(source, limits) {
       children: [],
       parent,
       path: `${parent.path}/${tag}[${ordinal + 1}]`,
+      // Set where a region of the page is NOT READ: a serialised shadow root,
+      // an iframe's document, an SVG holding a foreignObject. The structure
+      // pass reads it to decide which hierarchy claims the evidence supports.
+      unread: false,
     }
     parent.children.push(element)
     elements.push(element)
@@ -446,6 +454,7 @@ export function parseHtml(source, limits) {
       } else index = skipped.next
       if (tag === 'iframe') {
         problems.push({ ruleId: 'iframe-content-unavailable', detail: tag, pointer: element.path })
+        element.unread = true
       }
       continue
     }
@@ -481,11 +490,15 @@ export function parseHtml(source, limits) {
             detail: mode,
             pointer: element.path,
           })
+          element.unread = true
         } else {
+          // Template content is INERT until a script clones it, so it is not
+          // a region of the page that went unread. `unread` is not set here.
           problems.push({ ruleId: 'template-content-skipped', detail: tag, pointer: element.path })
         }
       } else if (/<foreignobject[\s/>]/i.test(inside)) {
         problems.push({ ruleId: 'foreign-content-skipped', detail: tag, pointer: element.path })
+        element.unread = true
       } else {
         problems.push({ ruleId: 'foreign-content-ignored', detail: tag, pointer: element.path })
       }

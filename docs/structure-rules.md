@@ -110,6 +110,28 @@ unnamed is still demoted, so the rule keeps biting.
 `h1`–`h6`, and any element with `role="heading"`. `aria-level` overrides the tag's level; a
 `role="heading"` with no `aria-level` is level 2, which is what ARIA specifies.
 
+### A hierarchy claim is not made across a region this file does not contain
+
+The heading list these checks run over is the part of the page that was **read**. Every heading
+inside a serialised shadow root, an iframe, an SVG `foreignObject` or a subtree whose `role` this
+tool does not recognise was dropped while building it — and a gap in that list may be a gap in the
+evidence rather than a gap in the page. Evidence dropped while building an index does not make a
+comparison over the index clean; it makes it incomplete. So:
+
+| Claim | Withheld when |
+| --- | --- |
+| `heading-level-skipped` | An unread region lies **between** the two headings in document order. |
+| `first-heading-not-top-level` | An unread region lies **before** the first heading that was read. |
+| `no-heading` | Any region was unread. |
+| `no-main-landmark` | Any region was unread. |
+| `multiple-top-level-headings` | Never. It is a fact about the headings that *are* here, and no absent markup can make two level 1 headings into one. |
+| `heading-empty` | The heading's own name could not be resolved (see above). |
+
+Withheld is not silent: the unread region has its own finding, the run is `incomplete` and the exit
+code is `2`. What is withheld is the verdict, not the evidence. A level jump with nothing unread
+between the two headings is still reported, and `summary.unreadRegions` counts the regions this
+snapshot does not contain.
+
 ## Rule catalog
 
 Severity comes from one frozen table in `src/rules.mjs`. An unknown rule id throws. This catalog is

@@ -182,6 +182,71 @@ test('a heading whose name reference is unresolved is never called empty', async
   assert.equal(report.documents[0].outline[2].name, null)
 })
 
+test('a level jump ACROSS a region this file does not contain is not reported', async (t) => {
+  // The heading list this check runs over is the part of the page that was
+  // READ: every heading inside a serialised shadow root was dropped while
+  // building it. The h2 that makes this hierarchy legal is in the shadow
+  // root, so "level 1 is followed by level 3" is a claim about markup the
+  // file does not contain. The region itself is reported and the run is
+  // incomplete, so nothing is passed over in silence.
+  const report = await mapDocument(
+    t,
+    '<main><h1>One</h1><my-el><template shadowrootmode="open"><h2>Two</h2></template></my-el>'
+      + '<h3>Three</h3></main>',
+  )
+  assert.deepEqual(found(report, 'heading-level-skipped'), [])
+  assert.ok(report.findings.some((finding) => finding.ruleId === 'shadow-root-not-traversed'))
+  assert.equal(report.status, 'incomplete')
+})
+
+test('the same jump with nothing unread between the two headings IS reported', async (t) => {
+  // The mirror, and the one that keeps the rule biting: the unread region is
+  // AFTER both headings here, so no markup inside it could sit between them.
+  // A guard written as "any unread region anywhere" would silence this.
+  const report = await mapDocument(
+    t,
+    '<main><h1>One</h1><h3>Three</h3>'
+      + '<my-el><template shadowrootmode="open"><p>later</p></template></my-el></main>',
+  )
+  assert.deepEqual(
+    found(report, 'heading-level-skipped').map((finding) => finding.location.pointer),
+    ['/main[1]/h3[1]'],
+  )
+  assert.equal(report.status, 'incomplete')
+})
+
+test('an unread region also withdraws the first-heading and no-heading claims', async (t) => {
+  // Both are claims about the whole document rather than about a pair, so any
+  // unread region withdraws them.
+  const below = await mapDocument(
+    t,
+    '<main><iframe src="/embed" title="Embed"></iframe><h2>Two</h2></main>',
+  )
+  assert.deepEqual(found(below, 'first-heading-not-top-level'), [])
+
+  const none = await mapDocument(t, '<main><iframe src="/embed" title="Embed"></iframe></main>')
+  assert.deepEqual(found(none, 'no-heading'), [])
+  assert.equal(none.status, 'incomplete')
+
+  // The mirrors: the same documents with nothing unread in them.
+  const readable = await mapDocument(t, '<main><h2>Two</h2></main>')
+  assert.equal(found(readable, 'first-heading-not-top-level').length, 1)
+  const empty = await mapDocument(t, '<main><p>Prose only.</p></main>')
+  assert.equal(found(empty, 'no-heading').length, 1)
+})
+
+test('a subtree whose role is unknown counts as unread for the hierarchy', async (t) => {
+  // role-unknown returns before the subtree is walked, so its headings are
+  // dropped from the list exactly as a shadow root's are.
+  const report = await mapDocument(
+    t,
+    '<main><h1>One</h1><div role="fancypanel"><h2>Two</h2></div><h3>Three</h3></main>',
+  )
+  assert.deepEqual(found(report, 'heading-level-skipped'), [])
+  assert.ok(report.findings.some((finding) => finding.ruleId === 'role-unknown'))
+  assert.equal(report.status, 'incomplete')
+})
+
 test('a first heading below level 1 is reported, and level 1 is not', async (t) => {
   const deep = await mapDocument(t, '<main><h2>A</h2><h3>B</h3></main>')
   assert.equal(found(deep, 'first-heading-not-top-level').length, 1)

@@ -273,6 +273,7 @@ function analyseDocument(source, file, limits) {
         typeof child.attributes.get('shadowrootmode') === 'string',
     )
     if (serialised) continue
+    element.unread = true
     findings.push(
       makeFinding({
         ruleId: 'shadow-root-unknown',
@@ -289,11 +290,16 @@ function analyseDocument(source, file, limits) {
   for (const problem of findDuplicateLandmarks(structure.landmarks)) {
     findings.push(problemToFinding(problem, file))
   }
-  for (const problem of findHeadingProblems(structure.headings)) {
+  for (const problem of findHeadingProblems(structure.headings, structure.unread)) {
     findings.push(problemToFinding(problem, file))
   }
 
-  if (!structure.landmarks.some((landmark) => landmark.role === 'main')) {
+  // "This document declares no main landmark" is a claim about the whole
+  // document, and a main landmark inside a shadow root, an iframe or a
+  // subtree whose role is unknown is exactly the evidence this run does not
+  // have. The regions themselves are reported and the run is incomplete, so
+  // nothing is passed over in silence -- what is withheld is the verdict.
+  if (structure.unread === 0 && !structure.landmarks.some((landmark) => landmark.role === 'main')) {
     findings.push(
       makeFinding({
         ruleId: 'no-main-landmark',

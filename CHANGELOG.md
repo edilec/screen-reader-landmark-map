@@ -21,6 +21,14 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   empty. The name was settled as empty instead, so a heading with visible text was reported as
   `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
   severity, both exit 1.
+- The heading hierarchy and `no-main-landmark` are no longer asserted across a region of the page
+  the run did not read. Every heading inside a serialised shadow root, an iframe, an SVG
+  `foreignObject` or a subtree whose `role` is unrecognised is dropped while building the heading
+  list, so a level jump over one of those regions, a first heading below level 1 with one before
+  it, "the document declares no heading at all" and "the document declares no main landmark" were
+  positive claims about markup the file does not contain. The regions themselves are still reported
+  and the run is still `incomplete`; the verdict is what is withheld. A level jump with nothing
+  unread between the two headings is still reported, and so is more than one level 1 heading.
 - A snapshot's file name is flattened like every other untrusted string. `documents[].file` carried
   the raw basename, so a file name holding U+000A forged a whole line of the human summary in the
   shape of a finding, and U+202E reversed the display after it. The uniqueness check that keeps two

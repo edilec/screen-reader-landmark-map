@@ -214,9 +214,15 @@ export function mapStructure(root, index) {
   const outline = []
   const problems = []
 
+  // Regions of the page this run did not read, counted in document order. A
+  // heading records how many were passed BEFORE it, which is what makes
+  // "is there an unread region between these two headings" answerable.
+  let unread = 0
+
   const walk = (element, depth) => {
     let nextDepth = depth
     if (element.kind === 'element' && element.tag !== '#document') {
+      if (element.unread === true) unread += 1
       const declared = declaredRole(element)
       if (declared.unknown !== undefined) {
         // The element is something this tool has never heard of, so what its
@@ -224,6 +230,7 @@ export function mapStructure(root, index) {
         // are exposed. The subtree is left unmapped and the run is incomplete,
         // which is the conservative answer and the one the rule documents.
         problems.push({ ruleId: 'role-unknown', detail: declared.unknown, pointer: element.path })
+        unread += 1
         return
       }
 
@@ -238,10 +245,10 @@ export function mapStructure(root, index) {
             detail: `the heading at ${element.path} names id "${named.reference}"`,
             pointer: element.path,
           })
-          headings.push({ element, level, name: null, determined: false })
+          headings.push({ element, level, name: null, determined: false, unreadBefore: unread })
           outline.push({ kind: 'heading', level, name: null, pointer: element.path, depth })
         } else {
-          headings.push({ element, level, name: named.name, determined: true })
+          headings.push({ element, level, name: named.name, determined: true, unreadBefore: unread })
           outline.push({ kind: 'heading', level, name: named.name, pointer: element.path, depth })
         }
       } else {
@@ -292,7 +299,7 @@ export function mapStructure(root, index) {
   }
 
   walk(root, 0)
-  return { landmarks, headings, outline, problems }
+  return { landmarks, headings, outline, problems, unread }
 }
 
 /**
@@ -367,15 +374,30 @@ export function findDuplicateLandmarks(landmarks) {
  * A heading whose name could not be resolved still has a LEVEL, so it stays in
  * the hierarchy check; only the emptiness check is skipped for it, because
  * "this heading is empty" would be a claim the evidence does not support.
+ *
+ * `unread` is the same rule applied to the OTHER kind of missing evidence.
+ * This list holds the headings of the part of the page that was read; every
+ * heading inside a shadow root, an iframe or a subtree whose role this tool
+ * does not know was dropped while building it. A gap that an unread region
+ * sits in is therefore a gap in the EVIDENCE, and "level 1 is followed by
+ * level 3" would be a positive claim about markup this file does not contain
+ * -- the mistake findDuplicateLandmarks is careful not to make. The claims
+ * that survive are the ones no absent markup could change: a level jump with
+ * nothing unread between the two headings, and more than one level 1 heading,
+ * which is a fact about the headings that ARE here.
  */
-export function findHeadingProblems(headings) {
+export function findHeadingProblems(headings, unread = 0) {
   const problems = []
   if (headings.length === 0) {
-    problems.push({ ruleId: 'no-heading', detail: 'the document declares no heading' })
+    // "The document declares no heading at all" is a claim about the whole
+    // document, so any unread region withdraws it.
+    if (unread === 0) {
+      problems.push({ ruleId: 'no-heading', detail: 'the document declares no heading' })
+    }
     return problems
   }
 
-  if (headings[0].level !== 1) {
+  if (headings[0].level !== 1 && headings[0].unreadBefore === 0) {
     problems.push({
       ruleId: 'first-heading-not-top-level',
       detail: `the first heading is level ${headings[0].level}`,
@@ -394,16 +416,17 @@ export function findHeadingProblems(headings) {
     }
   }
 
-  let previous = headings[0].level
+  let previous = headings[0]
   for (const heading of headings.slice(1)) {
-    if (heading.level > previous + 1) {
+    const across = heading.unreadBefore > previous.unreadBefore
+    if (heading.level > previous.level + 1 && !across) {
       problems.push({
         ruleId: 'heading-level-skipped',
-        detail: `level ${previous} is followed by level ${heading.level}`,
+        detail: `level ${previous.level} is followed by level ${heading.level}`,
         pointer: heading.element.path,
       })
     }
-    previous = heading.level
+    previous = heading
   }
 
   for (const heading of headings) {
