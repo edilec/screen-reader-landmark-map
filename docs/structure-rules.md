@@ -78,10 +78,10 @@ not mapped, and the run is incomplete.
 ### Accessible names, in this bounded form
 
 `aria-labelledby` resolved against ids **in this document only**, then `aria-label`, then — for
-headings — the element's text with `aria-hidden="true"` subtrees removed, then `title`. This is
-narrower than the full accessible name computation and it is not a substitute for it.
+headings — the element's contents, then `title`. This is narrower than the full accessible name
+computation and it is not a substitute for it.
 
-Two details of that computation are implemented here on purpose, and both are stated so a reader
+Three details of that computation are implemented here on purpose, and each is stated so a reader
 can check them against the specification rather than trust this tool:
 
 - **Step 2A.** A node referenced **directly** by `aria-labelledby` contributes its text *even when
@@ -93,6 +93,15 @@ can check them against the specification rather than trust this tool:
   empty**. A reference that resolves to an element with no perceivable text falls through to
   `aria-label`, then to the contents, then to `title` — exactly as an empty `aria-label` does. It
   does not settle the name as "unnamed".
+- **Step 2F.** The contents are not raw text. For each descendant the computation asks for *that
+  node's* accessible name, so a descendant's `aria-labelledby`, its `aria-label` and its own text
+  alternative all count: an `img` or an `area` contributes its `alt`, a button-like `input`
+  contributes its `value` or HTML's default for its type, a `select` contributes the selected
+  option, and a `br` contributes a space. Concatenating raw text instead found nothing at all in a
+  void element, which reported `<h1><img alt="Acme"></h1>` as a heading with no accessible name at
+  error severity. A `textarea` is deliberately not in that list: HTML makes its child text its
+  value, and this parser reads it as exactly that. A reference reached from **inside** the contents
+  that this document cannot resolve leaves the whole name unresolved, for the reason below.
 
 A reference naming nothing this document contains, or naming an id more than one element carries,
 is `name-reference-unresolved`. Such a landmark is **left out of the duplicate comparison** rather

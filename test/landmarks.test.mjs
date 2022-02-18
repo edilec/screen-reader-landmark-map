@@ -125,6 +125,26 @@ test('falling through does not invent a name: with nothing below it, the rule st
   assert.equal(report.status, 'fail')
 })
 
+test('a landmark labelled by a heading that holds only an image is labelled', async (t) => {
+  // The name-from-content rule, reached through a reference: step 2F computes
+  // each descendant's accessible name, and an `img` gets its name from `alt`.
+  // Concatenating raw text found nothing in the void element, so this nav came
+  // back unnamed and the page produced TWO error-severity
+  // duplicate-unlabelled-landmark findings, exit 1, on correct markup.
+  const report = await mapDocument(
+    t,
+    '<body><nav aria-labelledby="nt"><h2 id="nt"><img src="/p.svg" alt="Products"></h2>'
+      + '<a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav>'
+      + '<main><h1>Catalogue</h1></main></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [])
+  assert.deepEqual(ruleIds(report, 'heading-empty'), [])
+  assert.equal(report.status, 'pass')
+  const nav = report.documents[0].outline.find((entry) => entry.role === 'navigation')
+  assert.equal(nav.name, 'Products')
+})
+
 test('one unlabelled navigation region on its own is not reported', async (t) => {
   const report = await mapDocument(
     t,

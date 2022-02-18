@@ -165,6 +165,87 @@ test('a heading named by an aria-hidden element is named, not empty', async (t) 
   assert.equal(report.status, 'pass')
 })
 
+test('correct markup is not reported as a defect: a heading named by an image alt', async (t) => {
+  // Step 2F does not concatenate raw text: for each descendant it computes
+  // THAT node's accessible name, and HTML-AAM gives an `img` its name from
+  // `alt`. Concatenating raw text instead found nothing at all in a void
+  // element, so a logo in a heading came back as `heading-empty` at error
+  // severity and the run exited 1 on markup that was already right. The
+  // sister tool `aria-name-explainer` answers "Acme" for the same construct.
+  const report = await mapDocument(t, '<main><h1><img src="/logo.svg" alt="Acme"></h1></main>')
+  assert.deepEqual(found(report, 'heading-empty'), [])
+  assert.equal(report.status, 'pass')
+  assert.equal(report.documents[0].outline[1].name, 'Acme')
+
+  const mixed = await mapDocument(
+    t,
+    '<main><h1><img src="/logo.svg" alt="Acme"> Handbook</h1></main>',
+  )
+  assert.equal(mixed.documents[0].outline[1].name, 'Acme Handbook')
+})
+
+test('an image with no alt contributes nothing, so the rule still bites', async (t) => {
+  // The mirror: reading `alt` is not the same as assuming every image names
+  // its heading. An `img` with no `alt` has no accessible name, and a heading
+  // holding only that one is still empty.
+  const report = await mapDocument(t, '<main><h1><img src="/logo.svg"></h1></main>')
+  assert.deepEqual(
+    found(report, 'heading-empty').map((finding) => finding.location.pointer),
+    ['/main[1]/h1[1]'],
+  )
+  assert.equal(report.status, 'fail')
+
+  const decorative = await mapDocument(t, '<main><h1><img src="/rule.svg" alt=""></h1></main>')
+  assert.deepEqual(
+    found(decorative, 'heading-empty').map((finding) => finding.location.pointer),
+    ['/main[1]/h1[1]'],
+  )
+})
+
+test("a descendant contributes its own name, not the text underneath it", async (t) => {
+  // Each of these is a step of the computation applied to a DESCENDANT, which
+  // is what step 2F asks for. Reading the raw text instead reported the wrong
+  // name in every one, and an empty one in the last two.
+  const labelled = await mapDocument(
+    t,
+    '<main><h1><span aria-label="Acme">A</span></h1></main>',
+  )
+  assert.equal(labelled.documents[0].outline[1].name, 'Acme')
+
+  const referenced = await mapDocument(
+    t,
+    '<main><h1><span aria-labelledby="src">A</span></h1><span id="src">Acme</span></main>',
+  )
+  assert.equal(referenced.documents[0].outline[1].name, 'Acme')
+
+  const submit = await mapDocument(
+    t,
+    '<main><h1><input type="submit" value="Publish"></h1></main>',
+  )
+  assert.deepEqual(found(submit, 'heading-empty'), [])
+  assert.equal(submit.documents[0].outline[1].name, 'Publish')
+
+  const chosen = await mapDocument(
+    t,
+    '<main><h1><select><option>Draft</option><option selected>Published</option></select></h1></main>',
+  )
+  assert.equal(chosen.documents[0].outline[1].name, 'Published')
+})
+
+test('a reference reached from inside the contents is unresolved, not empty', async (t) => {
+  // Unknown is never a pass, and it is never a positive claim either: the
+  // text that happened to accumulate around an id this document does not
+  // contain is not the heading's name.
+  const report = await mapDocument(
+    t,
+    '<main><h1>Part <span aria-labelledby="not-here">one</span></h1></main>',
+  )
+  assert.deepEqual(found(report, 'heading-empty'), [])
+  assert.ok(report.findings.some((finding) => finding.ruleId === 'name-reference-unresolved'))
+  assert.equal(report.status, 'incomplete')
+  assert.equal(report.documents[0].outline[1].name, null)
+})
+
 test('a heading whose name reference is unresolved is never called empty', async (t) => {
   // "This heading is empty" would be a claim about text the document does not
   // contain. The level is still known, so it stays in the hierarchy check.

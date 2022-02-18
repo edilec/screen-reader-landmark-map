@@ -66,12 +66,12 @@ export {
   REPEATABLE_LANDMARK_ROLES,
   UNIQUE_LANDMARK_ROLES,
   accessibleName,
+  contributedText,
   findDuplicateLandmarks,
   findHeadingProblems,
   headingLevel,
   implicitLandmarkRole,
   mapStructure,
-  textContent,
 } from './structure.mjs'
 export { DestinationError, assertWritableDestination } from './write-guard.mjs'
 

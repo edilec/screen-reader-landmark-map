@@ -88,28 +88,125 @@ function hasSectioningAncestor(element) {
 }
 
 /**
- * The text an element contributes to a name.
+ * Elements whose text alternative is an attribute rather than their contents.
+ *
+ * HTML-AAM gives `img` and `area` their name from `alt`. Both are void
+ * elements, so a walk that only concatenates descendant text finds nothing in
+ * them at all -- which reported `<h1><img alt="Acme"></h1>` as a heading with
+ * no accessible name, at error severity, and a landmark labelled by such a
+ * heading as unlabelled. The sister tool `aria-name-explainer` reads the same
+ * `alt` in the same step.
+ */
+const ALT_NAMED = Object.freeze(['area', 'img'])
+
+/** Button-like `input` types whose `value` is their name, with the HTML default. */
+const BUTTON_INPUT_DEFAULTS = Object.freeze({ button: '', reset: 'Reset', submit: 'Submit' })
+
+/**
+ * A `select` embedded in somebody else's name contributes the chosen option,
+ * not every option it holds.
+ */
+function selectedOptionText(element, index, state) {
+  let fallback = null
+  for (const child of element.children) {
+    if (child.kind !== 'element' || child.tag !== 'option') continue
+    if (fallback === null) fallback = child
+    if (child.attributes.has('selected')) return contributedText(child, index, state, {})
+  }
+  return fallback === null ? '' : contributedText(fallback, index, state, {})
+}
+
+/**
+ * The text an embedded control or replaced element contributes, or null when
+ * the element is neither and its contents are what count.
+ *
+ * `textarea` is deliberately absent: HTML makes its child text its value, and
+ * this parser reads it as exactly that, so the ordinary walk is already right.
+ */
+function embeddedText(element, index, state) {
+  const tag = element.tag
+  if (ALT_NAMED.includes(tag)) return attribute(element, 'alt') ?? ''
+  if (tag === 'br') return ' '
+  if (tag === 'select') return selectedOptionText(element, index, state)
+  if (tag !== 'input') return null
+  const type = (attribute(element, 'type') ?? 'text').toLowerCase()
+  if (Object.hasOwn(BUTTON_INPUT_DEFAULTS, type)) {
+    return attribute(element, 'value') ?? BUTTON_INPUT_DEFAULTS[type]
+  }
+  if (type === 'image') return attribute(element, 'alt') ?? ''
+  return attribute(element, 'value') ?? ''
+}
+
+/**
+ * The text a node contributes to somebody else's accessible name.
+ *
+ * Step 2F of the accessible name computation does not concatenate raw text:
+ * for each descendant it computes THAT node's accessible name, so a
+ * descendant's `aria-labelledby`, its `aria-label` and its own text
+ * alternative all count. Concatenating raw text instead is what made a
+ * heading whose only child is `<img alt="Acme">` come back empty.
  *
  * `aria-hidden="true"` removes a subtree from the accessibility tree, so its
  * text is not part of any name -- with ONE exception, and the exception is
- * step 2A of the accessible name computation: a node referenced DIRECTLY by
- * `aria-labelledby` contributes its text even when it is hidden. The
- * reference is the author saying "this element is the label", and hiding it
- * does not withdraw that. It is deliberate specification behaviour, it
- * surprises people, and the sister tool `aria-name-explainer` implements the
- * same rule.
+ * step 2A: a node referenced DIRECTLY by `aria-labelledby` contributes its
+ * text even when it carries `aria-hidden`. The reference is the author saying
+ * "this element is the label", and hiding it does not withdraw that. It is
+ * deliberate specification behaviour, it surprises people, and the sister
+ * tool `aria-name-explainer` implements the same rule. The exception is for
+ * the referenced node ITSELF: an `aria-hidden` element inside it still
+ * contributes nothing, which is why the recursive calls pass no options.
  *
- * The exception is for the referenced node ITSELF. An `aria-hidden` element
- * inside it still contributes nothing, which is why the recursive call passes
- * no options.
+ * `inLabelledby` stops the recursion following a second `aria-labelledby`
+ * from inside a reference that is already being resolved, which is what the
+ * computation requires; `state.visited` stops a node contributing to its own
+ * name twice.
  *
  * Nothing else is modelled: this is the DOM's text, not a rendering, and CSS
  * that hides or generates text is not in the snapshot.
  */
-export function textContent(element, { directReference = false } = {}) {
+export function contributedText(element, index, state, options = {}) {
+  const { directReference = false, inLabelledby = false } = options
   if (element.kind === 'text') return element.text
   if (!directReference && attribute(element, 'aria-hidden') === 'true') return ''
-  return element.children.map((child) => textContent(child)).join(' ')
+  if (state.visited.has(element)) return ''
+  state.visited.add(element)
+
+  if (!inLabelledby) {
+    const references = tokens(attribute(element, 'aria-labelledby'))
+    if (references.length > 0) return resolveReferences(references, index, state)
+  }
+
+  const label = attribute(element, 'aria-label')
+  if (label !== null && isPerceivable(label)) return label
+
+  const embedded = embeddedText(element, index, state)
+  if (embedded !== null) return embedded
+
+  return element.children
+    .map((child) => contributedText(child, index, state, { inLabelledby }))
+    .join(' ')
+}
+
+/**
+ * Accumulate the text an `aria-labelledby` token list contributes.
+ *
+ * A token naming nothing this document contains, or naming an id more than
+ * one element carries, records itself on `state` and contributes nothing. The
+ * caller turns that into an UNRESOLVED name: "this evidence cannot say what
+ * the name is" is a different answer from "there is no name", and the two are
+ * never folded together.
+ */
+function resolveReferences(references, index, state) {
+  const parts = []
+  for (const reference of references) {
+    const targets = index.get(reference)
+    if (targets === undefined || targets.length !== 1) {
+      if (state.unresolved === null) state.unresolved = reference
+      continue
+    }
+    parts.push(contributedText(targets[0], index, state, { directReference: true, inLabelledby: true }))
+  }
+  return parts.join(' ')
 }
 
 /**
@@ -122,15 +219,13 @@ export function textContent(element, { directReference = false } = {}) {
 export function accessibleName(element, index, { fromContent }) {
   const references = tokens(attribute(element, 'aria-labelledby'))
   if (references.length > 0) {
-    const parts = []
-    for (const reference of references) {
-      const targets = index.get(reference)
-      if (targets === undefined || targets.length !== 1) {
-        return { unresolved: true, reference }
-      }
-      parts.push(textContent(targets[0], { directReference: true }))
-    }
-    const name = renderText(parts.join(' '))
+    // The element names itself out of its own reference resolution: a
+    // self-reference asks for its contents, not for a second pass over the
+    // reference it is already following.
+    const state = { visited: new Set([element]), unresolved: null }
+    const text = resolveReferences(references, index, state)
+    if (state.unresolved !== null) return { unresolved: true, reference: state.unresolved }
+    const name = renderText(text)
     if (isPerceivable(name)) return { name, source: 'aria-labelledby' }
     // Step 2B of the computation returns the accumulated text only IF IT IS
     // NOT EMPTY; a reference that resolves to nothing perceivable falls
@@ -146,7 +241,15 @@ export function accessibleName(element, index, { fromContent }) {
   }
 
   if (fromContent) {
-    const content = textContent(element)
+    const state = { visited: new Set([element]), unresolved: null }
+    const content = element.children
+      .map((child) => contributedText(child, index, state, {}))
+      .join(' ')
+    // A reference the document cannot resolve is unresolved wherever it is
+    // reached from, including from inside the contents. Reporting the text
+    // that happened to accumulate around it would be a name built on evidence
+    // dropped while building it.
+    if (state.unresolved !== null) return { unresolved: true, reference: state.unresolved }
     if (isPerceivable(content)) return { name: renderText(content), source: 'content' }
   }
 

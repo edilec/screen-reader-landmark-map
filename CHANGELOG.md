@@ -8,6 +8,12 @@ Renaming a `ruleId` is a breaking change and is recorded here.
 
 ## [Unreleased]
 
+### Changed
+
+- `textContent` is no longer exported. The accessible-name walk it was doing is now
+  `contributedText`, which takes the document's id index and the walk's state so that a
+  descendant's own `aria-labelledby` and `aria-label` can contribute, as step 2F requires.
+
 ### Fixed
 
 - A node referenced directly by `aria-labelledby` now contributes its text even when it carries
@@ -21,6 +27,16 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   empty. The name was settled as empty instead, so a heading with visible text was reported as
   `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
   severity, both exit 1.
+- A name computed from an element's contents now asks each descendant for *its* accessible name,
+  which is what step 2F says, instead of concatenating raw text. An `img` or an `area` contributes
+  its `alt`, a descendant's `aria-label` and `aria-labelledby` contribute, a button-like `input`
+  contributes its `value` or HTML's default, a `select` contributes the selected option, and a
+  `br` contributes a space. Raw text found nothing at all in a void element, so
+  `<h1><img alt="Acme"></h1>` was reported as `heading-empty` and a landmark labelled by such a
+  heading produced two `duplicate-unlabelled-landmark` findings — error severity, exit 1, on
+  markup the sister tool `aria-name-explainer` names correctly. An `aria-labelledby` reference
+  reached from inside the contents that this document cannot resolve now leaves the whole name
+  unresolved rather than reporting the text that accumulated around it.
 - The heading hierarchy and `no-main-landmark` are no longer asserted across a region of the page
   the run did not read. Every heading inside a serialised shadow root, an iframe, an SVG
   `foreignObject` or a subtree whose `role` is unrecognised is dropped while building the heading
