@@ -75,6 +75,31 @@ An explicit `role` attribute takes the first token and overrides the implicit ro
 the recognised list is `role-unknown`: whether the element is a landmark is unknown, its subtree is
 not mapped, and the run is incomplete.
 
+### What is not in the accessibility tree is not in the map
+
+`aria-hidden="true"` removes an element **and its subtree** from the accessibility tree, so nothing
+inside one is a landmark, a heading or an outline entry. That is not missing evidence — the markup
+is here and it says the region is not exposed — so such a region is **not** counted as unread and
+it withholds no claim about the rest of the page. Mapping it anyway reported a decorative
+`<h2 aria-hidden="true">` as `heading-empty` and a pair of navigation regions inside an
+`aria-hidden` wrapper as duplicates, both at error severity, on markup where none of it reaches
+anybody. `aria-hidden` is a tristate: only the value `true` hides, and `aria-hidden="false"` is
+exposed exactly as an absent attribute is.
+
+Two neighbouring cases are deliberately **not** treated as hiding, because this tool has only the
+markup:
+
+- The **`hidden` content attribute** sets `display: none` from the user-agent stylesheet, and
+  author CSS — which is not in this file — can override it. Concluding that a `hidden` element is
+  not exposed would be a claim about a stylesheet the run never saw, so its landmarks and headings
+  stay in the map. This is a stated limit, not a check.
+- A region this file does not contain — a serialised shadow root, an iframe, an SVG
+  `foreignObject`, a custom element that may hold a shadow root — keeps its finding and keeps the
+  run `incomplete` even when it sits inside an `aria-hidden` subtree, where it could not have held
+  an exposed landmark. The run is then over-cautious rather than wrong: it reports exit `2`, "I did
+  not read all of this", never a defect in the markup. The hierarchy claims are not withheld,
+  because nothing in an `aria-hidden` subtree can change them.
+
 ### Accessible names, in this bounded form
 
 `aria-labelledby` resolved against ids **in this document only**, then `aria-label`, then — for

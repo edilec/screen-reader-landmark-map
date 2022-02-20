@@ -263,6 +263,49 @@ test('a heading whose name reference is unresolved is never called empty', async
   assert.equal(report.documents[0].outline[2].name, null)
 })
 
+test('an aria-hidden heading is not in the hierarchy at all', async (t) => {
+  // `aria-hidden="true"` removes the element and its subtree from the
+  // accessibility tree, so there is no heading here to be empty. Mapping it
+  // anyway reported a decorative heading as `heading-empty` at error severity
+  // and exited 1 on markup where nothing in it is exposed to anyone.
+  const report = await mapDocument(
+    t,
+    '<main><h1>Catalogue</h1><h2 aria-hidden="true">Decorative</h2></main>',
+  )
+  assert.deepEqual(found(report, 'heading-empty'), [])
+  assert.equal(report.status, 'pass')
+  assert.deepEqual(
+    report.documents[0].outline
+      .filter((entry) => entry.kind === 'heading')
+      .map((entry) => [entry.level, entry.name, entry.pointer]),
+    [[1, 'Catalogue', '/main[1]/h1[1]']],
+  )
+
+  // The mirror: the same heading without aria-hidden is still reported, so
+  // the rule keeps biting.
+  const exposed = await mapDocument(t, '<main><h1>Catalogue</h1><h2></h2></main>')
+  assert.deepEqual(
+    found(exposed, 'heading-empty').map((finding) => finding.location.pointer),
+    ['/main[1]/h2[1]'],
+  )
+})
+
+test('an aria-hidden region is not an unread one, so the claims still hold', async (t) => {
+  // An unread region withholds a hierarchy claim because the markup might be
+  // there. This markup IS here and it says the subtree is not exposed, so the
+  // level jump over it is real and is reported.
+  const report = await mapDocument(
+    t,
+    '<main><h1>A</h1><div aria-hidden="true"><h2>B</h2></div><h3>C</h3></main>',
+  )
+  assert.deepEqual(
+    found(report, 'heading-level-skipped').map((finding) => finding.location.pointer),
+    ['/main[1]/h3[1]'],
+  )
+  assert.equal(report.status, 'fail')
+  assert.equal(report.summary.unreadRegions, 0)
+})
+
 test('a level jump ACROSS a region this file does not contain is not reported', async (t) => {
   // The heading list this check runs over is the part of the page that was
   // READ: every heading inside a serialised shadow root was dropped while

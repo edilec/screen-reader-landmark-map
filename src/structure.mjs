@@ -325,6 +325,18 @@ export function mapStructure(root, index) {
   const walk = (element, depth) => {
     let nextDepth = depth
     if (element.kind === 'element' && element.tag !== '#document') {
+      // `aria-hidden="true"` removes the element AND its subtree from the
+      // accessibility tree, so there is no landmark and no heading in here to
+      // map -- and nothing in here can change a claim about the rest of the
+      // page either, which is why it is not counted as an unread region.
+      // Mapping it anyway reported a decorative `<h2 aria-hidden="true">` as
+      // `heading-empty` and a pair of navigation regions inside an
+      // `aria-hidden` wrapper as duplicates, both at error severity, exit 1,
+      // on markup where none of it is exposed to anyone. The same rule was
+      // already applied to the text these elements contribute to a name;
+      // `aria-name-explainer` applies it to controls, which it reports as
+      // `control-not-exposed` and does not require a name of.
+      if (attribute(element, 'aria-hidden') === 'true') return
       if (element.unread === true) unread += 1
       const declared = declaredRole(element)
       if (declared.unknown !== undefined) {

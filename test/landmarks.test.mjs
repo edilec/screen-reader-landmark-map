@@ -145,6 +145,57 @@ test('a landmark labelled by a heading that holds only an image is labelled', as
   assert.equal(nav.name, 'Products')
 })
 
+test('landmarks inside an aria-hidden subtree are not in the map', async (t) => {
+  // Neither of these navigation regions is in the accessibility tree, so
+  // "two navigation landmarks carry no accessible name" is a claim about
+  // regions nobody can reach. It was reported twice at error severity, exit
+  // 1, on markup that is right.
+  const report = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1></main>'
+      + '<div aria-hidden="true"><nav><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav></div></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [])
+  assert.equal(report.status, 'pass')
+  assert.deepEqual(
+    report.documents[0].outline.map((entry) => entry.pointer),
+    ['/body[1]/main[1]', '/body[1]/main[1]/h1[1]'],
+  )
+
+  // The mirror: drop the aria-hidden and the same two regions are reported,
+  // so this is a rule about exposure and not a hole in the duplicate check.
+  const exposed = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1></main>'
+      + '<div><nav><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav></div></body>',
+  )
+  assert.deepEqual(ruleIds(exposed, 'duplicate-unlabelled-landmark'), [
+    '/body[1]/div[1]/nav[1]',
+    '/body[1]/div[1]/nav[2]',
+  ])
+})
+
+test('only aria-hidden="true" hides; aria-hidden="false" is the same as absent', async (t) => {
+  // ARIA defines `aria-hidden` as a tristate whose "false" value means the
+  // element IS exposed. Testing for the attribute's presence instead of its
+  // value would quietly drop an exposed region out of the map, which is the
+  // mirror hole of mapping a hidden one -- and a sweep that deleted the value
+  // comparison left every other test green.
+  const report = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1></main>'
+      + '<div aria-hidden="false"><nav><a href="/">Home</a></nav>'
+      + '<nav><a href="/terms/">Terms</a></nav></div></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [
+    '/body[1]/div[1]/nav[1]',
+    '/body[1]/div[1]/nav[2]',
+  ])
+  assert.equal(report.status, 'fail')
+})
+
 test('one unlabelled navigation region on its own is not reported', async (t) => {
   const report = await mapDocument(
     t,

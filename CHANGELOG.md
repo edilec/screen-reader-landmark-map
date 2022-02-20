@@ -27,6 +27,13 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   empty. The name was settled as empty instead, so a heading with visible text was reported as
   `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
   severity, both exit 1.
+- An element carrying `aria-hidden="true"`, and everything inside it, is no longer mapped.
+  `aria-hidden` removes a subtree from the accessibility tree, so it holds no landmark, no heading
+  and no outline entry; mapping it reported a decorative `<h2 aria-hidden="true">` as
+  `heading-empty` and a pair of navigation regions inside an `aria-hidden` wrapper as duplicates,
+  both at error severity and exit 1, on markup where none of it is exposed. Only the value `true`
+  hides: `aria-hidden="false"` is exposed, as an absent attribute is. Such a region is not counted
+  as unread either, so it withholds no claim about the rest of the page.
 - A name computed from an element's contents now asks each descendant for *its* accessible name,
   which is what step 2F says, instead of concatenating raw text. An `img` or an `area` contributes
   its `alt`, a descendant's `aria-label` and `aria-labelledby` contribute, a button-like `input`
