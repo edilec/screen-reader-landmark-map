@@ -27,6 +27,12 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   empty. The name was settled as empty instead, so a heading with visible text was reported as
   `heading-empty` and a `nav` carrying `aria-label` was reported as unlabelled — both at error
   severity, both exit 1.
+- An `<aside>` inside `<main>` is a `complementary` landmark again. HTML's sectioning content
+  category is exactly `article`, `aside`, `nav` and `section`; `main` is not in it, and only
+  sectioning content demotes an unnamed `aside`. One list was shared with the `header` and `footer`
+  rule, which HTML-AAM does scope with `main`, so every unnamed aside inside main was dropped out
+  of the landmark map and the outline, and two of them were never reported as regions that cannot
+  be told apart. The two lists are now separate and each is pinned on its own.
 - An element carrying `aria-hidden="true"`, and everything inside it, is no longer mapped.
   `aria-hidden` removes a subtree from the accessibility tree, so it holds no landmark, no heading
   and no outline entry; mapping it reported a decorative `<h2 aria-hidden="true">` as

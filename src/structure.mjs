@@ -53,8 +53,26 @@ export const KNOWN_ROLES = Object.freeze([
   'textbox', 'time', 'timer', 'toolbar', 'tooltip', 'tree', 'treegrid', 'treeitem',
 ])
 
-/** Sectioning content, which scopes `header`, `footer`, and an unnamed `aside`. */
-const SECTIONING = Object.freeze(['article', 'aside', 'main', 'nav', 'section'])
+/**
+ * HTML's SECTIONING CONTENT category, which is exactly `article`, `aside`,
+ * `nav` and `section`. `main` is not sectioning content and is deliberately
+ * absent.
+ */
+const SECTIONING = Object.freeze(['article', 'aside', 'nav', 'section'])
+
+/**
+ * What scopes a `header` or a `footer` out of being the page's banner or
+ * contentinfo. HTML-AAM lists `article`, `aside`, `main`, `nav` and `section`
+ * for those two elements, so this is a DIFFERENT list from sectioning content:
+ * a `header` inside `main` is a section header, while an `aside` inside `main`
+ * is still `complementary` whether or not it is named.
+ *
+ * One shared list conflated them. Every unnamed `<aside>` inside `<main>` was
+ * demoted out of the landmark map, so it never appeared in the outline and two
+ * of them were never reported as landmarks a screen reader user cannot tell
+ * apart.
+ */
+const SCOPES_HEADER_FOOTER = Object.freeze(['article', 'aside', 'main', 'nav', 'section'])
 
 const HEADING_TAGS = Object.freeze(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 
@@ -80,9 +98,9 @@ function attribute(element, name) {
   return typeof value === 'string' ? value : null
 }
 
-function hasSectioningAncestor(element) {
+function hasAncestorIn(element, tags) {
   for (let node = element.parent; node !== null; node = node.parent) {
-    if (node.kind === 'element' && SECTIONING.includes(node.tag)) return true
+    if (node.kind === 'element' && tags.includes(node.tag)) return true
   }
   return false
 }
@@ -281,7 +299,7 @@ export function declaredRole(element) {
 export function implicitLandmarkRole(element, hasName) {
   const tag = element.tag
   if (tag === 'header' || tag === 'footer') {
-    if (hasSectioningAncestor(element)) return null
+    if (hasAncestorIn(element, SCOPES_HEADER_FOOTER)) return null
     return tag === 'header' ? 'banner' : 'contentinfo'
   }
   const role = IMPLICIT_LANDMARK[tag]
@@ -289,7 +307,7 @@ export function implicitLandmarkRole(element, hasName) {
   if (NEEDS_NAME_TO_BE_A_LANDMARK.includes(role) && hasName === false) return null
   // A nested `aside` is complementary only when it is named; otherwise it is
   // generic, which is what the HTML accessibility mapping says.
-  if (role === 'complementary' && hasSectioningAncestor(element) && hasName === false) return null
+  if (role === 'complementary' && hasAncestorIn(element, SECTIONING) && hasName === false) return null
   return role
 }
 

@@ -67,9 +67,17 @@ map of the part it could see.
 | `nav` | `navigation` | |
 | `main` | `main` | |
 | `search` | `search` | |
-| `aside` | `complementary` | Always at the top level; inside sectioning content only when it has an accessible name. |
+| `aside` | `complementary` | Inside **sectioning content** — `article`, `aside`, `nav`, `section` — only when it has an accessible name. Everywhere else, including inside `main`, always. |
 | `form` | `form` | Only when it has an accessible name. |
 | `section` | `region` | Only when it has an accessible name. |
+
+Those are **two different lists**, and conflating them is a real defect rather than a tidying
+opportunity. HTML's sectioning content category is exactly `article`, `aside`, `nav` and `section`;
+`main` is not in it. HTML-AAM scopes a `header` or a `footer` with `article`, `aside`, `main`, `nav`
+and `section`, because a header inside `main` is a section header rather than the page banner — but
+an `aside` inside `main` is `complementary` whether or not it is named. One shared list demoted
+every unnamed `<aside>` inside `<main>` out of the landmark map, so it never reached the outline and
+two of them were never reported as regions a screen reader user cannot tell apart.
 
 An explicit `role` attribute takes the first token and overrides the implicit role. A role outside
 the recognised list is `role-unknown`: whether the element is a landmark is unknown, its subtree is

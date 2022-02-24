@@ -269,6 +269,76 @@ test('a header inside sectioning content is not a banner', async (t) => {
   )
 })
 
+test('main scopes a header and a footer, and a header at the top is still the banner', async (t) => {
+  // HTML-AAM lists `article`, `aside`, `main`, `nav` and `section` for these
+  // two elements, so `main` belongs in THIS list -- a header inside main is a
+  // section header, not the page banner.
+  const report = await mapDocument(
+    t,
+    '<body><header><p>Acme</p></header><main><header><p>Section</p></header>'
+      + '<h1>Catalogue</h1><footer><p>Section footer</p></footer></main>'
+      + '<footer><p>Legal</p></footer></body>',
+  )
+  assert.deepEqual(
+    report.documents[0].outline
+      .filter((entry) => entry.kind === 'landmark')
+      .map((entry) => [entry.role, entry.pointer]),
+    [
+      ['banner', '/body[1]/header[1]'],
+      ['main', '/body[1]/main[1]'],
+      ['contentinfo', '/body[1]/footer[1]'],
+    ],
+  )
+})
+
+test('an aside inside main is complementary: main is not sectioning content', async (t) => {
+  // HTML's SECTIONING CONTENT category is exactly `article`, `aside`, `nav`
+  // and `section`. `main` is not in it, so an `aside` inside `main` keeps the
+  // complementary role whether or not it is named -- a different list from the
+  // one that scopes a `header` or a `footer`, which does include `main`. One
+  // shared list demoted every unnamed aside inside main out of the map, so two
+  // of them were never reported as landmarks that cannot be told apart.
+  const report = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1><aside><p>Related</p></aside>'
+      + '<aside><p>Also related</p></aside></main></body>',
+  )
+  assert.deepEqual(ruleIds(report, 'duplicate-unlabelled-landmark'), [
+    '/body[1]/main[1]/aside[1]',
+    '/body[1]/main[1]/aside[2]',
+  ])
+  assert.equal(report.status, 'fail')
+})
+
+test('an unnamed aside inside sectioning content IS demoted, so the rule still bites', async (t) => {
+  // The mirror, one element per member of the category, because widening the
+  // list is not the fix either.
+  for (const tag of ['article', 'aside', 'nav', 'section']) {
+    const report = await mapDocument(
+      t,
+      `<body><main><h1>Catalogue</h1><${tag} aria-label="Outer">`
+        + `<aside><p>Related</p></aside><aside><p>Also</p></aside></${tag}></main></body>`,
+    )
+    assert.deepEqual(
+      ruleIds(report, 'duplicate-unlabelled-landmark'),
+      [],
+      `an unnamed aside inside <${tag}> is not a complementary landmark`,
+    )
+  }
+
+  // And a NAMED aside inside sectioning content is one again.
+  const named = await mapDocument(
+    t,
+    '<body><main><h1>Catalogue</h1><article aria-label="Outer">'
+      + '<aside aria-label="Notes"><p>A</p></aside>'
+      + '<aside aria-label="Notes"><p>B</p></aside></article></main></body>',
+  )
+  assert.deepEqual(ruleIds(named, 'duplicate-landmark-name'), [
+    '/body[1]/main[1]/article[1]/aside[1]',
+    '/body[1]/main[1]/article[1]/aside[2]',
+  ])
+})
+
 test('a section is a region only when it has an accessible name', async (t) => {
   const report = await mapDocument(
     t,
