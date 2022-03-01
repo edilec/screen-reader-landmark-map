@@ -166,7 +166,11 @@ must handle both. `incomplete` outranks `fail`.
 - **It does not open a browser, take a screenshot or measure anything.** No network access at any
   point, including in its tests.
 - **It does not compute full accessible names.** Landmark and heading names use a documented,
-  narrower form: `aria-labelledby` within the document, `aria-label`, text content, `title`.
+  narrower form: `aria-labelledby` within the document, `aria-label`, the contents — asking each
+  descendant for *its* name, so an `img`'s `alt` and a descendant's own `aria-label` count —
+  then `title`. An `aria-hidden="true"` subtree is not in the accessibility tree, so it holds no
+  landmark, no heading and no name text. The steps and the departures are listed in
+  [docs/structure-rules.md](./docs/structure-rules.md).
 - **It does not check anything but structure.** No contrast, no focus order, no form labels, no
   ARIA attribute validation.
 - **It does not find content outside landmarks**, and does not judge whether a heading's text is
