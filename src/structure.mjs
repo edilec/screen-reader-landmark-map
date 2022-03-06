@@ -124,14 +124,14 @@ const BUTTON_INPUT_DEFAULTS = Object.freeze({ button: '', reset: 'Reset', submit
  * A `select` embedded in somebody else's name contributes the chosen option,
  * not every option it holds.
  */
-function selectedOptionText(element, index, state) {
+function selectedOptionText(element, index, state, inLabelledby) {
   let fallback = null
   for (const child of element.children) {
     if (child.kind !== 'element' || child.tag !== 'option') continue
     if (fallback === null) fallback = child
-    if (child.attributes.has('selected')) return contributedText(child, index, state, {})
+    if (child.attributes.has('selected')) return contributedText(child, index, state, { inLabelledby })
   }
-  return fallback === null ? '' : contributedText(fallback, index, state, {})
+  return fallback === null ? '' : contributedText(fallback, index, state, { inLabelledby })
 }
 
 /**
@@ -141,11 +141,11 @@ function selectedOptionText(element, index, state) {
  * `textarea` is deliberately absent: HTML makes its child text its value, and
  * this parser reads it as exactly that, so the ordinary walk is already right.
  */
-function embeddedText(element, index, state) {
+function embeddedText(element, index, state, inLabelledby) {
   const tag = element.tag
   if (ALT_NAMED.includes(tag)) return attribute(element, 'alt') ?? ''
   if (tag === 'br') return ' '
-  if (tag === 'select') return selectedOptionText(element, index, state)
+  if (tag === 'select') return selectedOptionText(element, index, state, inLabelledby)
   if (tag !== 'input') return null
   const type = (attribute(element, 'type') ?? 'text').toLowerCase()
   if (Object.hasOwn(BUTTON_INPUT_DEFAULTS, type)) {
@@ -172,7 +172,7 @@ function embeddedText(element, index, state) {
  * deliberate specification behaviour, it surprises people, and the sister
  * tool `aria-name-explainer` implements the same rule. The exception is for
  * the referenced node ITSELF: an `aria-hidden` element inside it still
- * contributes nothing, which is why the recursive calls pass no options.
+ * contributes nothing, which is why `directReference` is never passed down.
  *
  * `inLabelledby` stops the recursion following a second `aria-labelledby`
  * from inside a reference that is already being resolved, which is what the
@@ -197,7 +197,7 @@ export function contributedText(element, index, state, options = {}) {
   const label = attribute(element, 'aria-label')
   if (label !== null && isPerceivable(label)) return label
 
-  const embedded = embeddedText(element, index, state)
+  const embedded = embeddedText(element, index, state, inLabelledby)
   if (embedded !== null) return embedded
 
   return element.children

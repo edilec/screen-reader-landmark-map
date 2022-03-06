@@ -232,6 +232,22 @@ test("a descendant contributes its own name, not the text underneath it", async 
   assert.equal(chosen.documents[0].outline[1].name, 'Published')
 })
 
+test('a reference already being resolved is not followed a second time', async (t) => {
+  // The computation does not re-enter `aria-labelledby` from inside a
+  // reference it is already resolving. The option here carries one, and the
+  // select sits inside the referenced element, so the flag has to reach the
+  // embedded-control walk as well as the ordinary one: the option contributes
+  // its own text, not the text the reference points at.
+  const report = await mapDocument(
+    t,
+    '<body><main><h1 aria-labelledby="holder"></h1>'
+      + '<span id="holder"><select><option selected aria-labelledby="other">Chosen</option>'
+      + '</select></span><span id="other">Elsewhere</span></main></body>',
+  )
+  assert.equal(report.documents[0].outline[1].name, 'Chosen')
+  assert.equal(report.status, 'pass')
+})
+
 test('a reference reached from inside the contents is unresolved, not empty', async (t) => {
   // Unknown is never a pass, and it is never a positive claim either: the
   // text that happened to accumulate around an id this document does not
