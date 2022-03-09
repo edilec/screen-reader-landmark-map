@@ -169,12 +169,22 @@ test('every kind of unread region withholds a hierarchy claim across it', async 
 })
 
 test('one finding is reported once, however many times it is produced', async (t) => {
-  // Two references to the same missing id produce the same finding twice.
+  // The same unsupported character reference twice in one text node produces
+  // the same rule, pointer and message twice. Reporting it twice would put
+  // two identical lines in front of somebody with one thing to fix.
   const report = await mapDocument(
     t,
-    '<body><main><h1 aria-labelledby="gone gone">Catalogue</h1></main></body>',
+    '<body><main><h1>&fnof; and &fnof; again</h1></main></body>',
   )
-  assert.equal(report.findings.filter((f) => f.ruleId === 'name-reference-unresolved').length, 1)
+  assert.equal(report.findings.filter((f) => f.ruleId === 'entity-unsupported').length, 1)
+
+  // The mirror: two DIFFERENT references are two findings, so dedupe is not
+  // collapsing anything it should keep.
+  const two = await mapDocument(
+    t,
+    '<body><main><h1>&fnof; and &bogus; again</h1></main></body>',
+  )
+  assert.equal(two.findings.filter((f) => f.ruleId === 'entity-unsupported').length, 2)
 })
 
 test('a snapshot that could not be read is still listed among the documents', async (t) => {
@@ -207,6 +217,15 @@ test('a node already being traversed contributes nothing, as the computation req
     '<body><main><h1><span aria-labelledby="src">x</span></h1><span id="src">Real</span></main></body>',
   )
   assert.equal(named(forward, '/body[1]/main[1]/h1[1]').name, 'Real')
+
+  // The same set is what stops one node contributing twice to one name: a
+  // reference list that names an id twice takes its text once. The sister
+  // tool `aria-name-explainer` answers the same construct the same way.
+  const repeated = await mapDocument(
+    t,
+    '<body><main><h1 aria-labelledby="src src">x</h1><span id="src">Real</span></main></body>',
+  )
+  assert.equal(named(repeated, '/body[1]/main[1]/h1[1]').name, 'Real')
 })
 
 test('aria-level is read only in the range ARIA defines, and the tag decides otherwise', () => {
