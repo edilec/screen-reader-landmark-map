@@ -106,6 +106,26 @@ test('two rules at one pointer sort by ruleId, by code unit', async (t) => {
   assert.deepEqual(atNav, ['duplicate-attribute', 'landmark-role-redundant'])
 })
 
+test('two findings of one rule at one pointer sort by message, by code unit', async (t) => {
+  // The last ordering key, reached only when file, pointer and ruleId are all
+  // equal. Two unsupported character references in one text node produce
+  // exactly that, and `&Zulu;` before `&alpha;` is the pair a collator
+  // reverses -- so substituting one here changes the order of the report.
+  const directory = await mkdtemp(join(tmpdir(), 'srlm-message-order-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const file = join(directory, 'page.html')
+  await writeFile(file, '<body><main><h1>&Zulu; and &alpha;</h1></main></body>')
+  const report = await mapSnapshots({ snapshots: [file] })
+  const entities = report.findings.filter((finding) => finding.ruleId === 'entity-unsupported')
+  assert.equal(entities.length, 2)
+  assert.ok(entities[0].message.includes('&Zulu;'), entities[0].message)
+  assert.ok(entities[1].message.includes('&alpha;'), entities[1].message)
+  assert.ok(
+    '&Zulu;'.localeCompare('&alpha;') > 0,
+    'this pair no longer discriminates on this Node build; choose another',
+  )
+})
+
 test('documents stay in the order they were given, and outlines in document order', async (t) => {
   const directory = await workspace(t)
   const report = await mapSnapshots({
