@@ -208,7 +208,17 @@ export function makeFinding({ ruleId, message, file, pointer, evidence, suggesti
   return finding
 }
 
-/** Documented order: location.file, then location.pointer, then ruleId, then message. */
+/**
+ * Documented order: location.file, then location.pointer, then ruleId, then message.
+ *
+ * The `ruleId` term is an EQUIVALENT MUTANT under a collator, and saying so
+ * is worth more than a mutation score: all 1056 ordered pairs of the 33 ids
+ * in the frozen table above order identically by code unit and under
+ * `Intl.Collator('en')`, with none collating equal. The other three terms DO
+ * discriminate -- several snapshots in one run, several pointers in one
+ * document, several messages under one rule -- and `test/determinism.test.mjs`
+ * pins each with inputs chosen so the two orderings disagree.
+ */
 export function sortFindings(findings) {
   return [...findings].sort(
     (left, right) =>

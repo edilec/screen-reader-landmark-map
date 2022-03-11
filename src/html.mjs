@@ -128,6 +128,8 @@ const REFERENCE = /&(?:#([0-9]+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]*));/g
  * reported under a name the page never had.
  */
 export function decodeReferences(text, problems, pointer) {
+  // An EQUIVALENT MUTANT: a fast path, nothing more. With no `&` in the text
+  // the replace below matches nothing and returns the same string.
   if (!text.includes('&')) return text
   return text.replace(REFERENCE, (whole, decimal, hexadecimal, name) => {
     if (decimal !== undefined || hexadecimal !== undefined) {
@@ -229,6 +231,9 @@ export function parseHtml(source, limits) {
   const closeImplied = (tag) => {
     for (;;) {
       const current = top()
+      // An EQUIVALENT MUTANT: the document node's tag is `#document`, which
+      // is neither `p` nor a member of any CLOSES_SIBLING list, so the two
+      // tests below already decline to pop it.
       if (current === root) return
       if (tag === 'p' || CLOSES_P.includes(tag)) {
         if (current.tag === 'p') {

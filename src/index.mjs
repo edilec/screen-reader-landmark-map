@@ -160,6 +160,9 @@ const PROBLEM_SUGGESTION = Object.freeze({
 
 function problemToFinding(problem, file) {
   const build = PROBLEM_MESSAGE[problem.ruleId]
+  // Unreachable while the two lists agree, so removing it is an EQUIVALENT
+  // MUTANT. It is kept because the day they stop agreeing it is the
+  // difference between a clear refusal and `undefined is not a function`.
   if (build === undefined) throw new TypeError(`Unknown problem "${problem.ruleId}"`)
   return makeFinding({
     ruleId: problem.ruleId,

@@ -144,6 +144,10 @@ function selectedOptionText(element, index, state, inLabelledby) {
 function embeddedText(element, index, state, inLabelledby) {
   const tag = element.tag
   if (ALT_NAMED.includes(tag)) return attribute(element, 'alt') ?? ''
+  // An EQUIVALENT MUTANT: deleting this line changes nothing that is ever
+  // reported. The parent joins what it collects with a single space, and
+  // every name reaches the report through `renderText`, which collapses runs
+  // of whitespace and trims -- so ' ' and '' cannot be told apart.
   if (tag === 'br') return ' '
   if (tag === 'select') return selectedOptionText(element, index, state, inLabelledby)
   if (tag !== 'input') return null
@@ -280,6 +284,9 @@ export function accessibleName(element, index, { fromContent }) {
 /** The explicit role token, or null. Throws nothing: unknown is an answer. */
 export function declaredRole(element) {
   const declared = tokens(attribute(element, 'role'))[0]
+  // An EQUIVALENT MUTANT: without this line the fall-through returns
+  // `{ role: null, unknown: undefined }`, and every caller tests
+  // `unknown !== undefined`, so the two answers behave identically.
   if (declared === undefined) return { role: null }
   if (!KNOWN_ROLES.includes(declared)) return { role: null, unknown: declared }
   return { role: declared }
