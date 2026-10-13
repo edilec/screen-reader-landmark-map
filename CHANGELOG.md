@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 Renaming a `ruleId` is a breaking change and is recorded here.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-14
 
 ### Changed
 
@@ -64,7 +64,7 @@ Renaming a `ruleId` is a breaking change and is recorded here.
   documents apart is now made on the flattened name, so two names that differ only in stripped
   characters are refused rather than reported as one name twice.
 
-## [0.1.0]
+Initial implementation:
 
 ### Added
 
